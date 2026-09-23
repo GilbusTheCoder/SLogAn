@@ -19,6 +19,7 @@ import random
 import CNNUtils
 import ADFALDTranslator
 
+from pathlib import Path
 
 MAX_CHUNK_LEN = 10
 LOG_PATH = ADFALDTranslator.DATAPATH / "ADFA-LD_Logs"
@@ -27,37 +28,63 @@ LOG_PATH = ADFALDTranslator.DATAPATH / "ADFA-LD_Logs"
 class CNNPreprocessor:
     def __init__(self, args: CNNUtils.TrainingParameters):
         self.isAnomolous:bool = args.isAnomolous    
+        self.currentLog = self._DetLogPath(args)
 
     #* Notes: 9998 = <UNK> && 9999 = <PAD>
     #TODO Add case for when log data is less than MAX_CHUNK_LEN
-    def _ChunkTrace(self) -> list[list[int]]:
+    def ChunkTrace(self) -> list[list[int]]:
         rawTrace = ADFALDTranslator.TraceToInt(self.currentLog)
+        if not rawTrace: return        
+
         windows:list[list[int]] = []
-    
         for i in range(len(rawTrace) - MAX_CHUNK_LEN + 1):
             windows.append(rawTrace[i: i+MAX_CHUNK_LEN])
 
         for chunk in windows: print(chunk)
         return windows  #* X's
 
+    #TODO Attack data wont work bc there's subfolders but it's there anyways just defunkt
+    def _DetLogPath(self, args: CNNUtils.TrainingParameters) -> Path | None:
+        path = None
+        if(args.isTraining):
+            if(args.isAnomolous): path = LOG_PATH / f"Attack_Data_Master/{args.logName}"
+            else: path = LOG_PATH / f"Training_Data_Master/{args.logName}"
+        else:
+            if(args.isAnomolous): path = LOG_PATH / f"Attack_Data_Master/{args.logName}"
+            else: path = LOG_PATH / f"Validation_Data_Master/{args.logName}"
+
+        return path
+        
 
 class SyscallEmbedder:
     #* Set seed for deterministic initialization
-    def __init__(self, syscallCount:int, embedSize:int, seed=None):
-        self.syscallCount = syscallCount
+    def __init__(self, embedSize:int = 4, seed=None):
         self.embedSize = embedSize
         self.seed = random.Random(seed) #Doesn't disrupt global random generator
-        self.weights = []
+        self.weights = {}
 
 
-        for i in range(syscallCount):
+        for id in ADFALDTranslator.syscalls:
             embedVector = []
-            for j in range(embedSize):
-                embedVector.append(random.uniform(-0.1, 0.1))
+            for i in range(embedSize): embedVector.append(random.uniform(-0.1, 0.1))
+            self.weights[id] = embedVector
 
-            self.weights.append(embedVector)
 
-    def Output(self, preprocessedWindow:list[int]):
+    def Output(self, preprocessedWindow:list[int]) -> list[list[float]]:
         output = []
-        for syscall in preprocessedWindow: output.append(self.weights[syscall].copy())
+        for syscall in preprocessedWindow: 
+            if(syscall < next(reversed(self.weights.keys()))): 
+                output.append()
+            else: output.append(self.weights[syscall].copy())
         return output
+
+
+params = CNNUtils.TrainingParameters(True, False, "UTD-0023.txt")
+preproc = CNNPreprocessor(params)
+
+chunks = preproc.ChunkTrace()
+embedder = SyscallEmbedder()
+
+for chunk in chunks: 
+    embedOutput = embedder.Output(chunk)
+    for output in embedOutput: print(output)
