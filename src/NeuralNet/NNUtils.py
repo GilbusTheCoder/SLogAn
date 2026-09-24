@@ -1,8 +1,35 @@
+import random
 import numpy as np
 
 from dataclasses import dataclass
 from pathlib import Path
 from enum import Enum
+
+@dataclass
+class Vec4:
+    def __init__(self, randomize:bool = False, seed:int | None=None, 
+                 w:float=0.0, x:float=0.0, y:float=0.0, z:float=0.0):
+        if randomize:
+            self.Randomize(seed)
+            return
+        
+        self.w: float = 0.00
+        self.x: float = 0.00
+        self.y: float = 0.00
+        self.z: float = 0.00
+
+    #? If you want a predictable starting point enter a seed
+    def Randomize(self, seed:int | None = None):
+        if seed: random.seed(seed)
+
+        self.w = round(random.uniform(-1.00, 1.00), 2)
+        self.x = round(random.uniform(-1.00, 1.00), 2)
+        self.y = round(random.uniform(-1.00, 1.00), 2)
+        self.z = round(random.uniform(-1.00, 1.00), 2)
+
+    def AsList(self) -> list[float]: return [self.w, self.x, self.y, self.z]
+    def ToConsole(self) -> None: print(f"{self.w}, {self.x}, {self.y}, {self.z}")
+
 
 class Model(Enum):
     UNK = 0
@@ -22,8 +49,10 @@ class Format(Enum):
 #? can be used as the NN state information.
 @dataclass
 class PreprocessingState:
-    model:Model         = Model.UNK
-    logFormat:Format    = Format.UNK
+    model:Model                     = Model.UNK
+    logFormat:Format                = Format.UNK
+    vocabulary:dict[str, int] | None= None
+    embedding:dict[int, Vec4] | None= None
 
     isHostLog:bool      = True
     isAnomolous:bool    = False
@@ -34,7 +63,7 @@ class PreprocessingState:
     logPath:Path| None  = None
 
 #? Throws a tantrum if you don't set something important
-def ValidateConfig(config) -> bool:
+def ValidateConfig(config, printToConsole:bool = False) -> bool:
     if not config.isHostLog:        raise ValueError ("Provided host preproc with netlog...")
     if config.logName is None:      raise ValueError ("No logName Provided...")
     if config.model is Model.UNK:   raise ValueError ("No Model Provided...")

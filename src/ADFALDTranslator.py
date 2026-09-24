@@ -4,17 +4,19 @@ from pathlib import Path
 HOSTLOGPATH = (Path.cwd() / "dat/HostLogs")
 SYSCALLS = (HOSTLOGPATH / "ADFA-LD_Syscall_List.txt")
 
-syscalls = {}
+syscalls:dict[int, str] = {}
 with open(SYSCALLS, "r") as f:
     for line in f:
         match = re.match(r"#define\s+__NR_(\w+)\s(\d+)", line)
         if match:
             name = match.group(1)
-            adfa_id = match.group(2)
+            adfa_id = int(match.group(2))
             syscalls[adfa_id] = name
 
+def PrintSyscalls() -> None: 
+    for id, syscall in syscalls.items(): print(f"{id} : {syscall}")
 
-def TraceToConsole(adfaLogName) -> None:
+def PrintADFATrace(adfaLogName) -> None:
     if not syscalls: return
     adfaLog = HOSTLOGPATH / "ADFA-LD_Logs/Training_Data_Master/" / adfaLogName
     traceIDs = []
