@@ -17,7 +17,7 @@ from NeuralNet.NNUtils import PreprocessingState as PpS, Format, Model
 
 
 config = PpS(model=Model.CONVOLVUTIONAL,
-            doDebug=False,
+            doDebug=True,
             logFormat=Format.ADFALD,
             logName="UTD-0023.txt" )
 

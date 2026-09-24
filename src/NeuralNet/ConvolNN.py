@@ -1,6 +1,5 @@
 '''Model does not do model stuff yet'''
 
-import NNUtils
 from NNUtils import PreprocessedData as PpD 
 from NetLogPreprocessor import NetProcState as NPpS
 from HostLogPreprocessor import HostProcState as HPpS

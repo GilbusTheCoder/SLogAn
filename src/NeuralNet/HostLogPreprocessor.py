@@ -15,7 +15,6 @@ if PARENTDIR not in sys.path:
     sys.path.append(PARENTDIR)
 
 import ADFALDTranslator as AT
-import numpy as np
 
 from NNUtils import PreprocessingState as PpS
 from NNUtils import PreprocessedData as PpD
@@ -31,14 +30,7 @@ class HostLogPreprocessor:
     def __init__(self, config: PpS):
         ValidateConfig(config) #throws tantrum if you goofed an important setting 
         self.state = self._Preconfigure(config)
-        self._ValidatePreconfig()
 
-    def _ValidatePreconfig(self) -> bool:
-        if self.state.doDebug:
-            for id, syscall in self.state.vocabulary.items():
-                print(f"{id} : {syscall} : {self.state.embedding[id].AsList()}")
-
-        return True
 
     #? The actual setting of data happens in here
     def Preproc(self) -> tuple[PpS, PpD]:         
@@ -47,20 +39,45 @@ class HostLogPreprocessor:
         metadata:dict[str, any] = self._PullMetadata()
 
         data = PpD(x, y, metadata)
+
+        if(self.state.doDebug):
+            self.state.Debug() 
+            data.Debug()
+
         return [self.state, data]
 
-    #* Notes: 9998 = <UNK> && 9999 = <PAD>
-    #TODO Add case for when log data is less than MAX_CHUNK_LEN
+    #* Notes: 0 = <UNK> && 9999 = <PAD>
     def _ChunkTrace(self) -> list[list[int]]:
         rawTrace = AT.TraceToInt(self.state.logPath)
         if not rawTrace: return        
-
+        vocabularizedTrace = self._VocabularizeTrace(rawTrace)
         windows:list[list[int]] = [] #* The sliding window section
-        for i in range(len(rawTrace) - MAX_CHUNK_LEN + 1):
-            windows.append(rawTrace[i: i+MAX_CHUNK_LEN])
+
+        if len(vocabularizedTrace) < MAX_CHUNK_LEN: 
+            return windows.append(self._PadWindow(vocabularizedTrace))
+        
+        for i in range(len(vocabularizedTrace) - MAX_CHUNK_LEN + 1):
+            windows.append(vocabularizedTrace[i: i+MAX_CHUNK_LEN])        
         return windows  #* X's
 
-    def _PullMetadata(self) -> dict[str, any]: pass
+    def _PadWindow(self, window:list[int]) -> list[int]: 
+        newWindow = window
+        while len(newWindow) < MAX_CHUNK_LEN: 
+            newWindow.append(9999)
+        return newWindow
+        
+    def _VocabularizeTrace(self, trace:list[int]) -> list[int]:
+        if not self.state.vocabulary: raise ValueError("no vocabulary to reference...")
+        transformedTrace:list[int] = []
+        for syscall in trace:
+            if syscall not in self.state.vocabulary: transformedTrace.append(0) #Unknown
+            transformedTrace.append(syscall+1)
+
+        return transformedTrace
+
+    def _PullMetadata(self) -> dict[str, any]: 
+        #TODO: This whole thing is going to be not fun....
+        pass
 
     #? Add any necessary data to a config and return as the preproc self.state
     def _Preconfigure(self, config:PpS) -> PpS:
@@ -72,23 +89,28 @@ class HostLogPreprocessor:
         return newConfig
 
     #? This vocabulary is just syscalls with an extra unknown value.
-    def _ConstructVocab(self, config: PpS) -> dict[str, int]: 
+    def _ConstructVocab(self, config: PpS) -> dict[int, str]: 
         if not AT.syscalls: raise ValueError("no syscalls available to construct vocabulary...")
         
         vocab:dict[int, str] = {0: "UNK"}
         for id, syscall in AT.syscalls.items(): 
             vocab[id+1] = syscall 
-        
+
+        vocab[9999] = "PAD"
         return vocab
 
     #? Each embed vector returned by this function is the neurons starting position
     def _ConstructEmbedding(self, vocabulary:dict[int, str]) -> dict[int, Vec4]: 
         embeddingData:dict[int, Vec4] = {}
+        
         for id, vocab in vocabulary.items():
             embed = Vec4(randomize=True)
             embeddingData[id] = embed
-
         return embeddingData
+
+    #TODO: Saving and loading of embedding, state and other necessary stuff
+    def _SaveEmbedding(self): pass
+    def _LoadEmbedding(self): pass
 
     #TODO Attack data wont work bc there's subfolders but it's there anyways just defunkt
     def _DetLogPath(self, config: PpS) -> Path | None:

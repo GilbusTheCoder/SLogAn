@@ -19,7 +19,7 @@ class Vec4:
         self.z: float = 0.00
 
     #? If you want a predictable starting point enter a seed
-    def Randomize(self, seed:int | None = None):
+    def Randomize(self, seed:int | None = None) -> None:
         if seed: random.seed(seed)
 
         self.w = round(random.uniform(-1.00, 1.00), 2)
@@ -29,6 +29,12 @@ class Vec4:
 
     def AsList(self) -> list[float]: return [self.w, self.x, self.y, self.z]
     def ToConsole(self) -> None: print(f"{self.w}, {self.x}, {self.y}, {self.z}")
+
+    def Add(self, other:Vec4) -> None:
+        self.w += other.w
+        self.x += other.x
+        self.y += other.y
+        self.z += other.z
 
 
 class Model(Enum):
@@ -51,7 +57,7 @@ class Format(Enum):
 class PreprocessingState:
     model:Model                     = Model.UNK
     logFormat:Format                = Format.UNK
-    vocabulary:dict[str, int] | None= None
+    vocabulary:dict[int, str] | None= None
     embedding:dict[int, Vec4] | None= None
 
     isHostLog:bool      = True
@@ -61,6 +67,19 @@ class PreprocessingState:
     
     logName:str | None  = None
     logPath:Path| None  = None
+
+    def Debug(self):
+        print("--------------  PREPROC STATE DEBUG --------------")
+        print(f"\t- Model: {self.model.name}\n\t- Format: {self.logFormat.name}")
+        print(f"\t- Training = {self.isTraining}")
+        if(self.isTraining):print(f"\t- Log anomaly rating = {float(self.isAnomolous)}")
+        if(self.isHostLog): print(f"\t- Host system log detected")
+        else:               print(f"\t- Server log detected\n")
+
+        print(f"\n-----------  Embedding & Vocabulary  ------------")
+        for id, embed in self.embedding.items(): print(f"\t\t--> {id} : {self.vocabulary[id]} : {embed.AsList()}")
+
+    
 
 #? Throws a tantrum if you don't set something important
 def ValidateConfig(config, printToConsole:bool = False) -> bool:
@@ -78,7 +97,19 @@ class PreprocessedData:
     x: object                                #* The data we're using
     y: float | None = None                   #* The value we're trying to predict 
                                              #* (0 = norm, 1 = abnorm)
-    metadata: dict[str, any] | None   = None #* Defined by the preprocessor employed      
+    metadata: dict[str, any] | None   = None #* Defined by the preprocessor employed    
+
+    def Debug(self) -> None:
+        print("--------------- PREPROC DATA DEBUG  --------------")
+        print(f"\t-X = {self.x}")
+        print(f"\t-Y = {self.y}")
+
+        if not self.metadata:
+            print("\t-Metadata = None")
+            return
+
+        print(f"\t-Metadata")
+        for id, value in self.metadata.items(): print(f"\t\t--> {id} : {value}")
 
 
 def ReLu(x:float) -> float: return max(0, x)
