@@ -23,6 +23,13 @@ from dataclasses import dataclass
 def ReLu(x:float) -> float: return max(0, x)
 def Sigmoid(x:float) -> float: return 1/(1 + np.exp(-x))
 
+#? Helper file functions
+def DetermineFileFormat(filename:str) -> FileFormat:
+    if(filename.endswith(".json")): return FileFormat.JSON
+    elif(filename.endswith(".txt")):return FileFormat.TEXT
+    elif(filename.endswith(".csv")):return FileFormat.CSV
+    else: raise ValueError("unknown file format...")
+
 #? Vector4D class used for embedding and neuron stuff
 @dataclass
 class Vec4:
@@ -72,7 +79,7 @@ class Neuron:
 
 
 
-class SaveFormat(Enum):
+class FileFormat(Enum):
     JSON = 1
     TEXT = 2
     CSV  = 3
@@ -121,30 +128,38 @@ class PreprocessingState:
         print(f"\n-----------  Embedding & Vocabulary  ------------")
         for id, embed in self.embedding.items(): print(f"\t\t--> {id} : {self.vocabulary[id]} : {embed.AsList()}")
 
-    def Save(self) -> None:
-        for fmt in SaveFormat:        
+    def Save(self) -> bool:
+        saveSuccess:bool = True
+        for fmt in FileFormat:        
             match(fmt):
-                case SaveFormat.JSON: saveSuccess = self._SaveJSON()
-                case SaveFormat.TEXT: saveSuccess = self._SaveTEXT()
-                case SaveFormat.CSV:  saveSuccess = self._SaveCSV()
-                case _: raise ValueError("Cannot save to unknown filetype...")
+                case FileFormat.JSON: 
+                    try: self._SaveJSON()
+                    except: saveSuccess = False 
+                case FileFormat.TEXT: 
+                    try: self._SaveTEXT()
+                    except: saveSuccess = False
+                case FileFormat.CSV: 
+                    try: self._SaveCSV()
+                    except: saveSuccess = False
 
-            try:   saveSuccess 
-            except ValueError as err:
-                print(f"Failed to save Preprocessing state to {fmt.name}...\n{err}")
-                
+        try: saveSuccess 
+        except ValueError as err: 
+            print(f"Save corrupted/unsuccessful...\n{err}")
+            return False
+        return saveSuccess
+            
     @classmethod
     def Load(cls, filename:str) -> "PreprocessingState":
         file = filename.lower()
         file.strip()
             
         loadedPpS = cls()
-        match(filename):
-            case SaveFormat.JSON: loadedPpS = cls._LoadJSON()
-            case SaveFormat.TEXT: loadedPpS = cls._LoadTEXT()
-            case SaveFormat.CSV:  loadedPpS = cls._LoadCSV()
-            case _: raise ValueError("Cannot load unknown filetype...")
-
+        match(file):
+            case FileFormat.JSON: loadedPpS = cls._LoadJSON()
+            case FileFormat.TEXT: loadedPpS = cls._LoadText()
+            case FileFormat.CSV:  loadedPpS = cls._LoadCSV()
+        
+        if not loadedPpS: raise ValueError("PreprocessingState loading corrupted/unsuccessful...")
         return loadedPpS
     
     #? Throws a tantrum if you don't set something important
@@ -171,7 +186,7 @@ class PreprocessingState:
 
     @classmethod
     def _LoadJSON(cls, filename:str) -> "PreprocessingState": 
-        file = filename.lower()
+        file = filename
         if(file.endswith(".json")): file.removesuffix(".json")
 
         loadPath:Path = PP_CFG_DIR / f"{file}.json"
@@ -223,8 +238,8 @@ class PreprocessingState:
         return True
 
     @classmethod
-    def _LoadTEXT(cls, filename:str) -> "PreprocessingState": 
-        file = filename.lower()
+    def _LoadText(cls, filename:str) -> "PreprocessingState": 
+        file = filename
         if(file.endswith(".txt")): file.removesuffix(".txt")
 
         loadPath:Path = PP_CFG_DIR / f"{file}.txt"
@@ -299,12 +314,16 @@ class PreprocessingState:
                 "embedding", json.dumps({str(id): vec.AsList() for id, vec in self.embedding.items()})
                 if self.embedding is not None
                 else None ])
-        
+
+        try: csvSaveDir.exists()
+        except ValueError as err:
+            print(f"save error for {csvSaveDir}\n{err}")
+            return False
         return True
     
     @classmethod
     def _LoadCSV(cls, filename:str) -> "PreprocessingState":  
-        file = filename.lower()
+        file = filename
         if(file.endswith(".csv")): file.removesuffix(".csv")
 
         loadPath:Path = PP_CFG_DIR / f"{file}.csv"
@@ -312,11 +331,9 @@ class PreprocessingState:
             raise ValueError(f"Cannot load data, invalid path &| filename\n{loadPath}...")
 
         state = cls()
-
         with loadPath.open("r", newline="", encoding="utf-8") as lfCsv:
             reader = csv.reader(lfCsv)
             next(reader)
-
             for row in reader:
                 key = row[0]
                 arg = row[1]
@@ -335,16 +352,13 @@ class PreprocessingState:
                             state.vocabulary = {
                                 int(id): syscall 
                                 for id, syscall in vocabDump.items() }
-
                         else: state.vocabulary = None
-
                     case "embedding":
                         if(arg):
                             embedDump = json.loads(arg)
                             state.embedding = {
                                 int(id): Vec4(*embed)
                                 for id, embed in embedDump.items() }
-
                         else: state.embedding = None 
         return state
 
@@ -429,10 +443,38 @@ class PreprocessedData:
         print(f"\t-Metadata")
         for id, value in self.metadata.items(): print(f"\t\t--> {id} : {value}")
 
-    def Save(self): pass
-    @classmethod
-    def Load(cls, filename:str) -> "PreprocessedData": pass
+    def Save(self) -> bool: 
+        saveSuccess:bool = True
+        for fmt in FileFormat:
+            match(fmt):
+                case FileFormat.JSON: 
+                    try: self._SaveJSON()
+                    except: saveSuccess = False
+                case FileFormat.TEXT:
+                    try: self._SaveText()
+                    except: saveSuccess = False
+                case FileFormat.CSV:
+                    try: self._SaveCSV()
+                    except: saveSuccess = False
 
+        try: saveSuccess
+        except ValueError as err:
+            print(f"Save corrupted/unsuccessful...\n{err}")
+            return False
+        return saveSuccess
+
+    @classmethod
+    def Load(cls, filename:str) -> "PreprocessedData":
+        file = filename.lower()
+        file.strip()
+
+        match(DetermineFileFormat(file)):
+            case FileFormat.JSON:loadedPpD = cls._LoadJSON(file)
+            case FileFormat.TEXT:loadedPpD = cls._LoadText(file)
+            case FileFormat.CSV: loadedPpD = cls._LoadCSV(file)
+
+        if not loadedPpD: raise ValueError("PreprocessedData loading corrupted/unsuccessful...")
+        return loadedPpD
 
     def _SaveJSON(self) -> bool:
         saveData = self._DatToDict()
@@ -449,7 +491,7 @@ class PreprocessedData:
 
     @classmethod
     def _LoadJSON(cls, filename:str) -> "PreprocessedData":
-        file = filename.lower()
+        file = filename
         if(file.endswith(".json")): file.removesuffix(".json")
 
         loadPath:Path = PP_CFG_DIR / f"{file}.json"
@@ -480,7 +522,7 @@ class PreprocessedData:
 
     @classmethod
     def _LoadText(cls, filename:str) -> "PreprocessedData": 
-        file = filename.lower()
+        file = filename
         if(file.endswith(".txt")): file.removesuffix(".txt")
 
         loadPath:Path = PP_CFG_DIR / f"{file}.txt"
@@ -533,7 +575,7 @@ class PreprocessedData:
 
     @classmethod
     def _LoadCSV(cls, filename:str) ->  "PreprocessedData":
-        file = filename.lower()
+        file = filename
         if(file.endswith(".csv")): file.removesuffix(".csv")
         
         loadPath:Path = PP_CFG_DIR / f"{file}.csv"
