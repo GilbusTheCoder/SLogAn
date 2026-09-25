@@ -14,6 +14,6 @@ if SIBNETDIR not in sys.path: sys.path.append(SIBNETDIR)
 
 import NeuralNet.HostLogPreprocessor as HLpP
 import NeuralNet.NetLogPreprocessor as NLpP
-from NeuralNet.NNUtils import PreprocessingState as PpS, Format, Model
+from NeuralNet.NNUtils import PreprocessingState as PpS, NNConfig as NNC
 
 #? Reference my ThomTest.py if you need

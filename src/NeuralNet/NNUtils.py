@@ -612,3 +612,13 @@ class PreprocessedData:
             x=data.get("x"),
             y=data.get("y"),
             metadata=data.get("metadata"))
+
+
+#? Any parameters you need to train your model should go in here
+@dataclass
+class NNConfig:
+    filters:int         = 64
+    kernel_size:int     = 3
+    dense_units:int     = 32
+    dropout:float       = 0.3
+

@@ -46,7 +46,8 @@ class HostLogPreprocessor:
 
         return [self.state, data]
 
-
+    #? Returns windows of vocabularized traces (trace stack windows translated 
+    #? to the models known syscall vocab)
     #* Notes: 0 = <UNK> && 9999 = <PAD>
     def _ChunkTrace(self) -> list[list[int]]:
         rawTrace = AT.TraceToInt(self.state.logPath)
