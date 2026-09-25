@@ -10,9 +10,9 @@ I'd say im a genius but i still gotta build the thing....'''
 
 import os
 import sys
-PARENTDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if PARENTDIR not in sys.path:
-    sys.path.append(PARENTDIR)
+PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PARENT_DIR not in sys.path:
+    sys.path.append(PARENT_DIR)
 
 import ADFALDTranslator as AT
 
@@ -22,7 +22,7 @@ from NNUtils import Vec4, ValidateConfig
 from pathlib import Path
 
 MAX_CHUNK_LEN   = 10
-ADFALD_LOG_PATH = AT.HOSTLOGPATH / "ADFA-LD_Logs"
+ADFALD_LOG_PATH = AT.HOST_LOG_PATH / "ADFA-LD_Logs"
 
 
 #? Takes training parameters and returns convoluted windows + (metadata/labels)
@@ -35,7 +35,7 @@ class HostLogPreprocessor:
     #? The actual setting of data happens in here
     def Preproc(self) -> tuple[PpS, PpD]:         
         x = self._ChunkTrace()          #Get windows/trace chunks for analysis
-        y = float(self.state.isAnomolous)   #0.0 if false 1.0 if true
+        y = float(self.state.isAnomalous)   #0.0 if false 1.0 if true
         metadata:dict[str, any] = self._PullMetadata()
 
         data = PpD(x, y, metadata)
@@ -45,6 +45,7 @@ class HostLogPreprocessor:
             data.Debug()
 
         return [self.state, data]
+
 
     #* Notes: 0 = <UNK> && 9999 = <PAD>
     def _ChunkTrace(self) -> list[list[int]]:
@@ -108,18 +109,14 @@ class HostLogPreprocessor:
             embeddingData[id] = embed
         return embeddingData
 
-    #TODO: Saving and loading of embedding, state and other necessary stuff
-    def _SaveEmbedding(self): pass
-    def _LoadEmbedding(self): pass
-
     #TODO Attack data wont work bc there's subfolders but it's there anyways just defunkt
     def _DetLogPath(self, config: PpS) -> Path | None:
         path = None
         if(config.isTraining):
-            if(config.isAnomolous): path = ADFALD_LOG_PATH / f"Attack_Data_Master/{config.logName}"
+            if(config.isAnomalous): path = ADFALD_LOG_PATH / f"Attack_Data_Master/{config.logName}"
             else: path = ADFALD_LOG_PATH / f"Training_Data_Master/{config.logName}"
         else:
-            if(config.isAnomolous): path = ADFALD_LOG_PATH / f"Attack_Data_Master/{config.logName}"
+            if(config.isAnomalous): path = ADFALD_LOG_PATH / f"Attack_Data_Master/{config.logName}"
             else: path = ADFALD_LOG_PATH / f"Validation_Data_Master/{config.logName}"
 
         return path

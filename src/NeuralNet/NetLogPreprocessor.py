@@ -19,9 +19,9 @@ Heuristic Ideas
 import os
 import sys
 
-PARENTDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if PARENTDIR not in sys.path:
-    sys.path.append(PARENTDIR)
+PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PARENT_DIR not in sys.path:
+    sys.path.append(PARENT_DIR)
 
 import NetTranslator as NT
 import NNUtils
@@ -38,7 +38,7 @@ from pathlib import Path
 class NetLogPreprocessor:
     def __init__(self, config: PpS):
         if config.isHostLog: raise ValueError ("Net Preprocessor provided hostlog")
-        self.isAnomolous = config.isAnomolous
+        self.isAnomolous = config.isAnomalous
         self.currentLog = self._DetLogPath(config)
 
     #? Use this function to return the preprocessed X and Y values for the CNN and

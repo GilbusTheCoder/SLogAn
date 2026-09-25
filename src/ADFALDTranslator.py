@@ -1,8 +1,8 @@
 import re
 from pathlib import Path
 
-HOSTLOGPATH = (Path.cwd() / "dat/HostLogs")
-SYSCALLS = (HOSTLOGPATH / "ADFA-LD_Syscall_List.txt")
+HOST_LOG_PATH = (Path.cwd() / "dat/HostLogs")
+SYSCALLS = (HOST_LOG_PATH / "ADFA-LD_Syscall_List.txt")
 
 syscalls:dict[int, str] = {}
 with open(SYSCALLS, "r") as f:
@@ -18,7 +18,7 @@ def PrintSyscalls() -> None:
 
 def PrintADFATrace(adfaLogName) -> None:
     if not syscalls: return
-    adfaLog = HOSTLOGPATH / "ADFA-LD_Logs/Training_Data_Master/" / adfaLogName
+    adfaLog = HOST_LOG_PATH / "ADFA-LD_Logs/Training_Data_Master/" / adfaLogName
     traceIDs = []
 
     try:
@@ -38,7 +38,7 @@ def PrintADFATrace(adfaLogName) -> None:
 
 def TraceToInt(adfaLogName) -> list[int] | None:
     if not syscalls: return
-    adfaLog = HOSTLOGPATH / "ADFA-LD_Logs/Training_Data_Master/" / adfaLogName
+    adfaLog = HOST_LOG_PATH / "ADFA-LD_Logs/Training_Data_Master/" / adfaLogName
 
     traceIDs = []
     try:

@@ -7,10 +7,10 @@ main.py '''
 import os
 import sys
 
-PARENTDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if PARENTDIR not in sys.path: sys.path.append(PARENTDIR)
-SIBNETDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../NeuralNet"))
-if SIBNETDIR not in sys.path: sys.path.append(SIBNETDIR)
+PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PARENT_DIR not in sys.path: sys.path.append(PARENT_DIR)
+SIBNET_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../NeuralNet"))
+if SIBNET_DIR not in sys.path: sys.path.append(SIBNET_DIR)
 
 import NeuralNet.HostLogPreprocessor as HLpP
 import NeuralNet.NetLogPreprocessor as NLpP
