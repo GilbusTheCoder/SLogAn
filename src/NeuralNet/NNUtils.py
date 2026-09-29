@@ -39,10 +39,10 @@ class Vec4:
             self.Randomize(seed)
             return
         
-        self.w: float = 0.00
-        self.x: float = 0.00
-        self.y: float = 0.00
-        self.z: float = 0.00
+        self.w: float = w
+        self.x: float = x
+        self.y: float = y
+        self.z: float = z
 
     #? If you want a predictable starting point enter a seed
     def Randomize(self, seed:int | None = None) -> None:
@@ -115,18 +115,20 @@ class PreprocessingState:
     vocabulary:dict[int, str] | None= None
     embedding:dict[int, Vec4] | None= None
 
-    def Debug(self):
-        self._Validate()
+    def Debug(self, doPrint:bool=False):
+        try: self._Validate()
+        except: raise ValueError("PpS failed to validated...")
 
-        print("--------------  PREPROC STATE DEBUG --------------")
-        print(f"\t- Model: {self.model.name}\n\t- Format: {self.logFormat.name}")
-        print(f"\t- Training = {self.isTraining}")
-        if(self.isTraining):print(f"\t- Log anomaly rating = {float(self.isAnomalous)}")
-        if(self.isHostLog): print(f"\t- Host system log detected")
-        else:               print(f"\t- Server log detected\n")
+        if(doPrint):
+            print("--------------  PREPROC STATE DEBUG --------------")
+            print(f"\t- Model: {self.model.name}\n\t- Format: {self.logFormat.name}")
+            print(f"\t- Training = {self.isTraining}")
+            if(self.isTraining):print(f"\t- Log anomaly rating = {float(self.isAnomalous)}")
+            if(self.isHostLog): print(f"\t- Host system log detected")
+            else:               print(f"\t- Server log detected\n")
 
-        print(f"\n-----------  Embedding & Vocabulary  ------------")
-        for id, embed in self.embedding.items(): print(f"\t\t--> {id} : {self.vocabulary[id]} : {embed.AsList()}")
+            print(f"\n-----------  Embedding & Vocabulary  ------------")
+            for id, embed in self.embedding.items(): print(f"\t\t--> {id} : {self.vocabulary[id]} : {embed.AsList()}")
 
     def Save(self) -> bool:
         saveSuccess:bool = True
@@ -163,11 +165,34 @@ class PreprocessingState:
         return loadedPpS
     
     #? Throws a tantrum if you don't set something important
-    def _Validate(self) -> None:
-        if not self.isHostLog:           raise ValueError ("Provided host preproc with netlog...")
-        if self.logName is None:         raise ValueError ("No logName Provided...")
-        if self.model is Model.UNK:      raise ValueError ("No Model Provided...")
-        if self.logFormat is Format.UNK: raise ValueError ("No Format Provided...")
+    def _Validate(self) -> bool:
+        try: self.Model is not Model.UNK
+        except ValueError as err:
+            print(f"PpS model is not set...\n{err}")
+            return False
+
+        try: self.logFormat is not Format.UNK
+        except ValueError as err:
+            print(f"PpS log format is not set...\n{err}")
+            return False
+
+        try: self.logName is not None
+        except ValueError as err:
+            print(f"no log name in PpS...\n{err}")
+            return False
+
+        try: self.logPath is not None
+        except ValueError as err:
+            print(f"no log path in PpS...\n{err}")
+            return False
+
+        if(self.logFormat is Format.ADFALD):
+            try: self.isHostLog
+            except ValueError as err:
+                print(f"non-host log format is set to be processed as host...\n{err}")
+                return False
+
+        return True
 
     #* SAVING & LOADING FUNCTIONALITY
     def _SaveJSON(self) -> bool: 
@@ -187,7 +212,7 @@ class PreprocessingState:
     @classmethod
     def _LoadJSON(cls, filename:str) -> "PreprocessingState": 
         file = filename
-        if(file.endswith(".json")): file.removesuffix(".json")
+        if(file.endswith(".json")): file = file.removesuffix(".json")
 
         loadPath:Path = PP_CFG_DIR / f"{file}.json"
         if not loadPath.exists(): 
@@ -199,8 +224,6 @@ class PreprocessingState:
             raise ValueError(f"Couldn't load cfg data from {loadPath}...")
         
         return cls._DatToDict(loadData)
-
-
 
     def _SaveTEXT(self) -> bool: 
         textSaveDir:Path = PP_CFG_DIR / f"{datetime.now().strftime("%H:%M:%S")}-{self.model.name}-PpS.txt"
@@ -240,7 +263,7 @@ class PreprocessingState:
     @classmethod
     def _LoadText(cls, filename:str) -> "PreprocessingState": 
         file = filename
-        if(file.endswith(".txt")): file.removesuffix(".txt")
+        if(file.endswith(".txt")): file = file.removesuffix(".txt")
 
         loadPath:Path = PP_CFG_DIR / f"{file}.txt"
         if not loadPath.exists():
@@ -267,10 +290,10 @@ class PreprocessingState:
                             case "logFormat": state.logFormat = Format[value]
                             case "logName":   state.logName = (None if value == None else value) 
                             case "logPath":   state.logPath = (None if value == None else Path(value))
-                            case "isTraining": state.isTraining = bool(value)
-                            case "isAnomalous": state.isAnomalous = bool(value)
-                            case "isHostLog": state.isHostLog = bool(value)
-                            case "doDebug": state.doDebug = bool(value)
+                            case "isTraining": state.isTraining = value.lower() == "true"
+                            case "isAnomalous": state.isAnomalous = value.lower() == "true"
+                            case "isHostLog": state.isHostLog = value.lower() == "true"
+                            case "doDebug": state.doDebug = value.lower() == "true"
                             case _: raise ValueError(f"Bad State key: {key}...")
 
                     case "VOCABULARY": 
@@ -324,7 +347,7 @@ class PreprocessingState:
     @classmethod
     def _LoadCSV(cls, filename:str) -> "PreprocessingState":  
         file = filename
-        if(file.endswith(".csv")): file.removesuffix(".csv")
+        if(file.endswith(".csv")): file = file.removesuffix(".csv")
 
         loadPath:Path = PP_CFG_DIR / f"{file}.csv"
         if not loadPath.exists():
@@ -341,11 +364,11 @@ class PreprocessingState:
                     case "model":       state.model = Model[arg]
                     case "logFormat":   state.logFormat = Format[arg]
                     case "logName":     state.logName = arg
-                    case "logPath":     Path(arg) if arg is not None else None
-                    case "isTraining":  bool(arg)
-                    case "isAnomalous": bool(arg)
-                    case "isHostLog":   bool(arg)
-                    case "doDebug":     bool(arg)
+                    case "logPath":     state.logPath = Path(arg) if arg is not None else None
+                    case "isTraining":  state.isTraining = arg.lower() == "true"
+                    case "isAnomalous": state.isAnomalous = arg.lower() == "true"
+                    case "isHostLog":   state.isHostLog = arg.lower() == "true"
+                    case "doDebug":     state.doDebug = arg.lower() == "true"
                     case "vocabulary":
                         if (arg):
                             vocabDump = json.loads(arg)
@@ -367,7 +390,7 @@ class PreprocessingState:
             "model": self.model.name,
             "logFormat": self.logFormat.name,
             "logName": self.logName,
-            "logPath": self.logPath(
+            "logPath": (
                 None
                 if self.logPath is None
                 else(str(self.logPath))),
@@ -617,8 +640,102 @@ class PreprocessedData:
 #? Any parameters you need to train your model should go in here
 @dataclass
 class NNConfig:
+    loadSavedConfig:bool    = False
+    configFileName:str|None = None
+
+    model:Model         = Model.UNK
+    learningRate:float  = 0.001
     filters:int         = 64
-    kernel_size:int     = 3
-    dense_units:int     = 32
+    kernelSize:int     = 3
+    denseUnits:int     = 32
     dropout:float       = 0.3
 
+    @classmethod
+    def InitFromPpS(cls, preprocState:PreprocessingState) -> "NNConfig":
+        preprocState.Debug(doPrint=False)
+        defaultConfig = cls()
+        defaultConfig.model = preprocState.model
+        return defaultConfig
+
+    def Debug(self, doPrint:bool) -> None: 
+        try: self._Validate()
+        except: raise ValueError("Failed to validate NNConfig...")
+
+        if(doPrint):
+            print("--------------  NN CONFIG DEBUG --------------")
+            print(f"\t- Loading from config: {self.loadSavedConfig}")
+            if self.cfgLogName: print(f"\t\t- {self.configFileName}")
+
+            print(f"\t- model: {self.model.name}")
+            print(f"\t- filter count: {float(self.isAnomalous)}")
+            print(f"\t- kernel size: {self.kernelSize}")
+            print(f"\t- dense units: {self.denseUnits}")
+            print(f"\t- dropout: {self.dropout}")
+
+    def Save(self) -> bool: 
+        saveData = self._DatToDict()
+        fileName = self.configFileName
+
+        if fileName is None:
+            fileName = (f"{self.model.name}-NNConfig.json")
+        if not fileName.endswith(".json"): fileName += ".json"
+
+        saveDir:Path = NN_CFG_DIR / fileName
+
+        try: 
+            with saveDir.open("w", encoding="utf-8") as lcJson:
+                json.dump(saveData, lcJson, indent=4)
+                return True
+        except(OSError, TypeError, ValueError) as err:
+            print(f"Could not save NNConfiguration to {saveDir}...\n{err}")
+            return False
+        return True
+
+    @classmethod
+    def LoadNew(cls) -> "NNConfig": pass
+    @classmethod
+    def Load(cls) -> "NNConfig": pass
+    
+    def _Validate(self) -> bool: 
+        try: self.model is Model.UNK    #* Check model is set
+        except ValueError as err:
+            print(f"No model type found in NNConfig...\n{err}")
+            return False
+
+        if(self.loadSavedConfig):       #* If there's no config or name we crack it
+            try: 
+                self.configFileName is not None
+                cfgFile = self.configFileName
+                if(cfgFile.endswith(".json")): cfgFile.removesuffix(".json")
+
+                loadPath:Path = NN_CFG_DIR / f"{cfgFile}.json"
+                if not loadPath.exists():
+                    raise ValueError(f"Couldn't load cfg from {loadPath}...")
+
+            except ValueError as err:
+                print(f"No NNConfig filename set to load from...\n{err}")
+                return False
+        return True
+
+    def _DatToDict(self) -> dict[str, Any]: 
+        return {
+            "loadSavedConfig": self.loadSavedConfig,
+            "configFileName" : self.configFileName,
+            "model": self.model,
+            "learningRate": self.learningRate,
+            "filters": self.filters,
+            "kernelSize": self.kernelSize,
+            "denseUnits": self.denseUnits,
+            "dropout": self.dropout }
+
+    @classmethod
+    def _DatFromDict(cls, dat:dict[str, Any]) -> "NNConfig": 
+        return cls(
+            loadSavedConfig=dat["loadSavedConfig"],
+            configFileName =dat["configFileName"],
+            model=dat["model"],
+            learningRate=dat["learningRate"],
+            filters=dat["filters"],
+            kernelSize=dat["kernelSize"],
+            denseUnits=dat["denseUnits"],
+            dropout=dat["dropout"] )
