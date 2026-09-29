@@ -44,6 +44,8 @@ class Vec4:
         self.y: float = y
         self.z: float = z
 
+    def Size() -> int: return 4
+
     #? If you want a predictable starting point enter a seed
     def Randomize(self, seed:int | None = None) -> None:
         if seed: random.seed(seed)
@@ -645,10 +647,12 @@ class NNConfig:
 
     model:Model         = Model.UNK
     learningRate:float  = 0.001
-    filters:int         = 64
-    kernelSize:int     = 3
-    denseUnits:int     = 32
-    dropout:float       = 0.3
+
+    embedSize:int       = Vec4.Size()
+    filters:int         = 64            #The amount of NN layers
+    kernelSize:int      = 3             #How many adjacent windows to look at simultaneously
+    denseUnits:int      = 32            #Controls the FCL (fully connected layer)
+    dropout:float       = 0.3           #% of values dropped during training to regulate neuron reliance
 
     @classmethod
     def InitFromPpS(cls, preprocState:PreprocessingState) -> "NNConfig":
@@ -667,6 +671,7 @@ class NNConfig:
             if self.cfgLogName: print(f"\t\t- {self.configFileName}")
 
             print(f"\t- model: {self.model.name}")
+            print(f"\t- embed size: {self.embedSize}")
             print(f"\t- filter count: {float(self.isAnomalous)}")
             print(f"\t- kernel size: {self.kernelSize}")
             print(f"\t- dense units: {self.denseUnits}")
@@ -723,6 +728,7 @@ class NNConfig:
             "configFileName" : self.configFileName,
             "model": self.model,
             "learningRate": self.learningRate,
+            "embedSize": self.embedSize,
             "filters": self.filters,
             "kernelSize": self.kernelSize,
             "denseUnits": self.denseUnits,
@@ -735,6 +741,7 @@ class NNConfig:
             configFileName =dat["configFileName"],
             model=dat["model"],
             learningRate=dat["learningRate"],
+            embedSize=dat["embedSize"],
             filters=dat["filters"],
             kernelSize=dat["kernelSize"],
             denseUnits=dat["denseUnits"],
