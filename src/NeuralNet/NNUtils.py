@@ -429,7 +429,7 @@ class PreprocessingState:
         loadedEmbeddings:dict[int, Vec4] = data["embedding"]
         if loadedEmbeddings is not None:
             loadedEmbeddings = {
-                int(id): Vec4(*values)
+                int(id): Vec4(w=values[0], x=values[1], y=values[2], z=values[3])
                 for id, values in loadedEmbeddings.items() }
 
         return cls(

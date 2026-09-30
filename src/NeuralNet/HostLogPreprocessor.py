@@ -109,6 +109,4 @@ class HostLogPreprocessor:
 
         return path
 
-    def _LoadState(self, cfgFileName:str) -> PpS:
-        newState:PpS = PpS.Load(cfgFileName)
-        return newState
+    def _LoadState(self, cfgFileName:str) -> PpS: return PpS.Load(cfgFileName)
