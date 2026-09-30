@@ -1,15 +1,13 @@
-'''Model does not do model stuff yet'''
-
 import NNUtils
 import torch.nn as nn
-from torch import Tensor, relu, optim, float32  #Use torch.relu for tensor relu
+from torch import Tensor, relu, optim, float32  #Use torch.relu for tensor relu NNUtils.ReLu for floats
 
 from NNUtils import PreprocessedData as PpD, PreprocessingState as PpS, NNConfig as NNC
 import HostLogPreprocessor as HLPp
 import NetLogPreprocessor as NLPp
 
 class CNN(nn.Module):
-    def __init__(self, config:NNC, data:PpD, state:PpS):
+    def __init__(self, config:NNC, state:PpS, data:PpD):
         super().__init__()
         
         self.config:NNC = config
@@ -28,6 +26,8 @@ class CNN(nn.Module):
         self.lossFunction = nn.BCEWithLogitsLoss()  #Handles sigmoid internally
         self.lossData:list[float] = []
         self.optimizer  = optim.Adam(self.parameters(), lr=config.learningRate)
+
+    def Debug(self): pass
 
     #? Runs training passes and returns a list of loss values for human inspection
     def Train(self, epochs:int) -> list[float]: 

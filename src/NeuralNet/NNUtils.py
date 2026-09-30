@@ -1,12 +1,9 @@
-import os
-import sys
 
-PP_CFG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../dat/cfg/Pp"))
-if PP_CFG_DIR not in sys.path: 
-    sys.path.append(PP_CFG_DIR)
-NN_CFG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../dat/cfg/NN"))
-if NN_CFG_DIR not in sys.path: 
-    sys.path.append(NN_CFG_DIR)
+from pathlib import Path
+
+DATA_DIR = (Path.cwd() / "dat")
+NN_CFG_DIR = (DATA_DIR / "cfg/NN")
+PP_CFG_DIR = (DATA_DIR / "cfg/Pp")
 
 import csv
 import json
@@ -15,7 +12,6 @@ import numpy as np
 
 from enum import Enum
 from typing import Any
-from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
 
@@ -66,7 +62,8 @@ class Vec4:
 
 
 
-#? A representation of a neuron.
+#? A representation of a neuron. Idk if we'll ever use it as tensors exist but it's
+#? here none-the-less
 class Neuron:
     def __init__(self, weightVecLen:int):
         self.weights = [0.0] * weightVecLen #*E.g len = 4 = [0.0, 0.0, 0.0, 0.0]
@@ -88,7 +85,7 @@ class FileFormat(Enum):
 
 class Model(Enum):
     UNK = 0
-    CONVOLVUTIONAL = 1
+    CONVOLUTIONAL = 1
     CLUSTERING = 2
 
 #TODO: Add your log formats here
@@ -138,13 +135,19 @@ class PreprocessingState:
             match(fmt):
                 case FileFormat.JSON: 
                     try: self._SaveJSON()
-                    except: saveSuccess = False 
+                    except Exception as err:
+                        print(f"JSON save failed...\n{err}") 
+                        saveSuccess = False 
                 case FileFormat.TEXT: 
                     try: self._SaveTEXT()
-                    except: saveSuccess = False
+                    except Exception as err:
+                        print(f"JSON save failed...\n{err}") 
+                        saveSuccess = False
                 case FileFormat.CSV: 
                     try: self._SaveCSV()
-                    except: saveSuccess = False
+                    except Exception as err:
+                        print(f"JSON save failed...\n{err}") 
+                        saveSuccess = False
 
         try: saveSuccess 
         except ValueError as err: 
@@ -155,20 +158,20 @@ class PreprocessingState:
     @classmethod
     def Load(cls, filename:str) -> "PreprocessingState":
         file = filename.lower()
-        file.strip()
+        file = file.strip()
             
         loadedPpS = cls()
-        match(file):
-            case FileFormat.JSON: loadedPpS = cls._LoadJSON()
-            case FileFormat.TEXT: loadedPpS = cls._LoadText()
-            case FileFormat.CSV:  loadedPpS = cls._LoadCSV()
+        match(DetermineFileFormat(file)):
+            case FileFormat.JSON: loadedPpS = cls._LoadJSON(filename=file)
+            case FileFormat.TEXT: loadedPpS = cls._LoadText(filename=file)
+            case FileFormat.CSV:  loadedPpS = cls._LoadCSV(filename=file)
         
         if not loadedPpS: raise ValueError("PreprocessingState loading corrupted/unsuccessful...")
         return loadedPpS
     
     #? Throws a tantrum if you don't set something important
     def _Validate(self) -> bool:
-        try: self.Model is not Model.UNK
+        try: self.model is not Model.UNK
         except ValueError as err:
             print(f"PpS model is not set...\n{err}")
             return False
@@ -199,14 +202,14 @@ class PreprocessingState:
     #* SAVING & LOADING FUNCTIONALITY
     def _SaveJSON(self) -> bool: 
         saveData:dict[str, any] = self._DatToDict()
-
         try: saveData
         except ValueError as err:
             print(f"Couldn't save data, no data found...\n{err}")
             return False
 
-        jsonSaveDir:Path = PP_CFG_DIR / f"{datetime.now().strftime("%H:%M:%S")}-{self.model.name}-PpS.json"
-        with jsonSaveDir.open("w", encoding="utf-8") as sfJson:
+        jsonSaveDir = PP_CFG_DIR / f"{datetime.now().strftime('%H-%M-%S')}--{self.model.name}-PpS.json"
+        jsonSaveDir.parent.mkdir(parents=True, exist_ok=True)
+        with jsonSaveDir.open(mode='w', encoding='utf-8') as sfJson:
             json.dump(saveData, sfJson, indent=4)
 
         return True
@@ -225,10 +228,10 @@ class PreprocessingState:
         if not loadData: 
             raise ValueError(f"Couldn't load cfg data from {loadPath}...")
         
-        return cls._DatToDict(loadData)
+        return cls._DatFromDict(loadData)
 
     def _SaveTEXT(self) -> bool: 
-        textSaveDir:Path = PP_CFG_DIR / f"{datetime.now().strftime("%H:%M:%S")}-{self.model.name}-PpS.txt"
+        textSaveDir:Path = PP_CFG_DIR / f"{datetime.now().strftime("%H-%M-%S")}--{self.model.name}-PpS.txt"
 
         with textSaveDir.open("w", encoding="utf-8") as sfText:
             sfText.write("[STATE]\n")
@@ -243,12 +246,12 @@ class PreprocessingState:
         
             sfText.write(f"\n[VOCABULARY]\n")
             if self.vocabulary is not None:
-                for id, syscall in self.vocabulary:
+                for id, syscall in self.vocabulary.items():
                     sfText.write(f"\t{id}: {syscall}\n")
 
             sfText.write(f"\n[EMBEDDING]\n")
             if self.embedding is not None:
-                for id, embed in self.embedding:
+                for id, embed in self.embedding.items():
                     values = embed.AsList()
                     sfText.write(f"\t{id}: ")
 
@@ -316,7 +319,7 @@ class PreprocessingState:
         return state
     
     def _SaveCSV(self) -> bool:  
-        csvSaveDir:Path = PP_CFG_DIR / f"{datetime.now().strftime("%H:%M:%S")}-{self.model.name}-PpS.csv"
+        csvSaveDir:Path = PP_CFG_DIR / f"{datetime.now().strftime("%H-%M-%S")}-{self.model.name}-PpS.csv"
 
         with csvSaveDir.open("w", newline="", encoding="utf-8") as sfCsv:
             writer = csv.writer(sfCsv)
@@ -412,7 +415,7 @@ class PreprocessingState:
                 None
                 if self.embedding is None
                 else{
-                    str(id): embed
+                    str(id): embed.AsList()
                     for id, embed in self.embedding.items() }), }
     
     @classmethod
@@ -432,7 +435,7 @@ class PreprocessingState:
         return cls(
             model       = Model[data["model"]],
             logFormat   = Format[data["logFormat"]],
-            logname     = data["logName"],
+            logName     = data["logName"],
             logPath     = (
                 None
                 if data["logPath"] is None
@@ -456,17 +459,19 @@ class PreprocessedData:
                                              #* (0 = norm, 1 = abnorm)
     metadata: dict[str, Any] | None   = None #* Defined by the preprocessor employed    
 
-    def Debug(self) -> None:
-        print("--------------- PREPROC DATA DEBUG  --------------")
-        print(f"\t-X = {self.x}")
-        print(f"\t-Y = {self.y}")
+    #TODO: Add validation functionality
+    def Debug(self, doPrint:bool = False) -> None:
+        if(doPrint):
+            print("--------------- PREPROC DATA DEBUG  --------------")
+            print(f"\t-X = {self.x}")
+            print(f"\t-Y = {self.y}")
 
-        if not self.metadata:
-            print("\t-Metadata = None")
-            return
+            if not self.metadata:
+                print("\t-Metadata = None")
+                return
 
-        print(f"\t-Metadata")
-        for id, value in self.metadata.items(): print(f"\t\t--> {id} : {value}")
+            print(f"\t-Metadata")
+            for id, value in self.metadata.items(): print(f"\t\t--> {id} : {value}")
 
     def Save(self) -> bool: 
         saveSuccess:bool = True

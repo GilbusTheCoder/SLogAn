@@ -1,25 +1,10 @@
-''' ok so using a 1d CNN involves chunking the trace to known lengths and analysing
-each chunk. This is great until you realise there's no way for a smooth-brain like
-myself to identify which windows are anomolous and which are find given I only know
-whether the log file in it's entirety is sus.... so we're just gonna teach the CNN
-what normal logs look like, then using that data and a distribution curve we can
-identify how far from normal each window is an use that to identify particularly
-anomolous sections of the ADFA-LD logs 
 
-I'd say im a genius but i still gotta build the thing....'''
-
-import os
-import sys
-PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if PARENT_DIR not in sys.path:
-    sys.path.append(PARENT_DIR)
+from pathlib import Path
+PARENT_DIR = (Path.cwd() / "src")
 
 import ADFALDTranslator as AT
-
-from NNUtils import PreprocessingState as PpS
-from NNUtils import PreprocessedData as PpD
-from NNUtils import Vec4, ValidateConfig 
-from pathlib import Path
+from NNUtils import PreprocessingState as PpS, PreprocessedData as PpD
+from NNUtils import Vec4, Model, Format, PP_CFG_DIR
 
 MAX_CHUNK_LEN   = 10
 ADFALD_LOG_PATH = AT.HOST_LOG_PATH / "ADFA-LD_Logs"
@@ -27,24 +12,27 @@ ADFALD_LOG_PATH = AT.HOST_LOG_PATH / "ADFA-LD_Logs"
 
 #? Takes training parameters and returns convoluted windows + (metadata/labels)
 class HostLogPreprocessor:
-    def __init__(self, config: PpS):
-        ValidateConfig(config) #throws tantrum if you goofed an important setting 
-        self.state = self._Preconfigure(config)
+    def __init__(self, initConfig:PpS | str):        
+        if type(initConfig) is not str:
+            self.state:PpS  = self._InitState(initConfig)
+            self.data:PpD   = self._InitData()
+            return
+        
+        self.state:PpD  = self._LoadState(initConfig)
+        self.data:PpD   = self._InitData()
 
+
+    def GetStateData(self) -> tuple[PpS, PpD]:
+        return [self.state, self.data]
 
     #? The actual setting of data happens in here
-    def Preproc(self) -> tuple[PpS, PpD]:         
-        x = self._ChunkTrace()          #Get windows/trace chunks for analysis
+    def _InitData(self) -> PpD:         
+        x = self._ChunkTrace()              #Get windows/trace chunks for analysis
         y = float(self.state.isAnomalous)   #0.0 if false 1.0 if true
         metadata:dict[str, any] = self._PullMetadata()
 
         data = PpD(x, y, metadata)
-
-        if(self.state.doDebug):
-            self.state.Debug() 
-            data.Debug()
-
-        return [self.state, data]
+        return data
 
     #? Returns windows of vocabularized traces (trace stack windows translated 
     #? to the models known syscall vocab)
@@ -82,12 +70,11 @@ class HostLogPreprocessor:
         pass
 
     #? Add any necessary data to a config and return as the preproc self.state
-    def _Preconfigure(self, config:PpS) -> PpS:
-        newConfig = config
-        newConfig.logPath   = self._DetLogPath(config)
-        newConfig.vocabulary= self._ConstructVocab(config)
+    def _InitState(self, initialStateCfg:PpS) -> PpS:
+        newConfig:PpS = initialStateCfg
+        newConfig.logPath   = self._DetLogPath(initialStateCfg)
+        newConfig.vocabulary= self._ConstructVocab(initialStateCfg)
         newConfig.embedding = self._ConstructEmbedding(newConfig.vocabulary)
-
         return newConfig
 
     #? This vocabulary is just syscalls with an extra unknown value.
@@ -121,3 +108,7 @@ class HostLogPreprocessor:
             else: path = ADFALD_LOG_PATH / f"Validation_Data_Master/{config.logName}"
 
         return path
+
+    def _LoadState(self, cfgFileName:str) -> PpS:
+        newState:PpS = PpS.Load(cfgFileName)
+        return newState
