@@ -18,7 +18,7 @@ def PrintSyscalls() -> None:
 
 def PrintADFATrace(adfaLogName) -> None:
     if not syscalls: return
-    adfaLog = HOST_LOG_PATH / "ADFA-LD_Logs/Training_Data_Master" / adfaLogName
+    adfaLog = (f"{adfaLogName}")
     traceIDs = []
 
     try:
@@ -38,7 +38,7 @@ def PrintADFATrace(adfaLogName) -> None:
 
 def TraceToInt(adfaLogName) -> list[int] | None:
     if not syscalls: return
-    adfaLog = HOST_LOG_PATH / f"ADFA-LD_Logs/Training_Data_Master/{adfaLogName}" 
+    adfaLog = (f"{adfaLogName}") 
 
     traceIDs = []
     try:

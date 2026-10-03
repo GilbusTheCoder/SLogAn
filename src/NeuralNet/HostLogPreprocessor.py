@@ -4,7 +4,9 @@ PARENT_DIR = (Path.cwd() / "src")
 
 import ADFALDTranslator as AT
 from NNUtils import PreprocessingState as PpS, PreprocessedData as PpD
-from NNUtils import Vec4, Model, Format, PP_CFG_DIR
+from NNUtils import Vec4, Model, AnomalyType
+from typing import Any
+from re import sub
 
 MAX_CHUNK_LEN   = 10
 ADFALD_LOG_PATH = AT.HOST_LOG_PATH / "ADFA-LD_Logs"
@@ -12,27 +14,67 @@ ADFALD_LOG_PATH = AT.HOST_LOG_PATH / "ADFA-LD_Logs"
 
 #? Takes training parameters and returns convoluted windows + (metadata/labels)
 class HostLogPreprocessor:
-    def __init__(self, initConfig:PpS | str):        
-        if type(initConfig) is not str:
-            self.state:PpS  = self._InitState(initConfig)
-            self.data:PpD   = self._InitData()
-            return
-        
-        self.state:PpD  = self._LoadState(initConfig)
-        self.data:PpD   = self._InitData()
+    def __init__(self, initState:PpS | str, initData:PpD | str | None = None):        
+        if type(initState) is not str:
+            self.state:PpS  = self._InitState(initState)
+        else: self.state:PpD= self._LoadState(initData)
+
+        if initData is None:self.data:PpD = self._InitData()
+        else:               self.data:PpD = self._LoadData(initData)
 
 
     def GetStateData(self) -> tuple[PpS, PpD]:
         return [self.state, self.data]
 
-    #? The actual setting of data happens in here
-    def _InitData(self) -> PpD:         
-        x = self._ChunkTrace()              #Get windows/trace chunks for analysis
-        y = float(self.state.isAnomalous)   #0.0 if false 1.0 if true
-        metadata:dict[str, any] = self._PullMetadata()
+    def Save(self) -> bool:
+        saveSuccess:bool = True
 
-        data = PpD(x, y, metadata)
-        return data
+        if not self.state.Save(): 
+            saveSuccess = False
+            return saveSuccess
+        if not self.data.Save(): 
+            saveSuccess = False
+        return saveSuccess
+
+    def Load(self, initState:PpS | str, initData:PpD | str | None = None):
+        if type(initState) is not str: self.state = self._InitState(initState)
+        else: self.state = self._LoadState(initState)
+        
+        if initData is not None: self.data = self._LoadData(initData)
+        else: self.data = self._InitData()
+
+    #? Add any necessary data to a config and return as the preproc self.state
+    def _InitState(self, initialStateCfg:PpS) -> PpS:
+        newConfig:PpS = initialStateCfg
+        newConfig.logPath   = self._DetLogPath(initialStateCfg)
+        newConfig.vocabulary= self._ConstructVocab()
+        newConfig.embedding = self._ConstructEmbedding(newConfig.vocabulary)
+        return newConfig
+
+    def _LoadState(self, cfgFileName:str) -> PpS: return PpS.Load(cfgFileName)
+
+    #? The actual setting of data happens in here
+    def _InitData(self) -> PpD:
+        match self.state.model.name:
+            case "UNK": raise ValueError(f"Cannot init data for unknown model...")
+        
+            case "CONVOLUTIONAL":
+                x = self._ChunkTrace()              #Get windows/trace chunks for analysis
+                x = self._EmbedTrace(x)             #Apply known embeddings to chunks
+                y = float(self.state.isAnomalous)   #0.0 if false 1.0 if true
+                metadata:dict[str, Any] = self._PullMetadata(x)
+        
+            case "CLUSTERING" : pass                #TODO: This
+        return PpD(x, y, metadata)
+
+    @classmethod
+    def _LoadData(cls, data:PpD | str) ->PpD:
+        if type(data) is not str:
+            newData:PpD = data
+            newData.Debug()
+            return newData
+        else: return PpD.Load(data)
+
 
     #? Returns windows of vocabularized traces (trace stack windows translated 
     #? to the models known syscall vocab)
@@ -50,6 +92,23 @@ class HostLogPreprocessor:
             windows.append(vocabularizedTrace[i: i+MAX_CHUNK_LEN])        
         return windows  #* X's
 
+    def _EmbedTrace(self, traceWindows:list[list[int]]) -> list[list[Vec4]]:
+        if not traceWindows:
+            raise ValueError(f"No windows to embed...")
+        
+        embeddedTrace = []
+        for window in traceWindows:
+            embeddedChunk = []
+            for trace in window:
+                if not trace in self.state.embedding: 
+                    embeddedChunk.append(self.state.embedding[0])
+                else: embeddedChunk.append(self.state.embedding[trace])
+
+            embeddedTrace.append(embeddedChunk)
+        return embeddedTrace
+
+
+
     def _PadWindow(self, window:list[int]) -> list[int]: 
         newWindow = window
         while len(newWindow) < MAX_CHUNK_LEN: 
@@ -65,20 +124,17 @@ class HostLogPreprocessor:
 
         return transformedTrace
 
-    def _PullMetadata(self) -> dict[str, any]: 
-        #TODO: This whole thing is going to be not fun....
-        pass
+    def _PullMetadata(self, x:object) -> dict[str, Any]: 
+        metadata:dict[str, Any] = {}
 
-    #? Add any necessary data to a config and return as the preproc self.state
-    def _InitState(self, initialStateCfg:PpS) -> PpS:
-        newConfig:PpS = initialStateCfg
-        newConfig.logPath   = self._DetLogPath(initialStateCfg)
-        newConfig.vocabulary= self._ConstructVocab(initialStateCfg)
-        newConfig.embedding = self._ConstructEmbedding(newConfig.vocabulary)
-        return newConfig
+        if self.state.model.name == "UNK":
+            raise ValueError("Cannot pull metadata for unknown model...")
 
+        return metadata
+
+    
     #? This vocabulary is just syscalls with an extra unknown value.
-    def _ConstructVocab(self, config: PpS) -> dict[int, str]: 
+    def _ConstructVocab(self) -> dict[int, str]: 
         if not AT.syscalls: raise ValueError("no syscalls available to construct vocabulary...")
         
         vocab:dict[int, str] = {0: "UNK"}
@@ -94,19 +150,22 @@ class HostLogPreprocessor:
         
         for id, vocab in vocabulary.items():
             embed = Vec4(randomize=True)
-            embeddingData[id] = embed
+            embeddingData[id] = embed.AsList()
         return embeddingData
 
-    #TODO Attack data wont work bc there's subfolders but it's there anyways just defunkt
     def _DetLogPath(self, config: PpS) -> Path | None:
         path = None
         if(config.isTraining):
             if(config.isAnomalous): path = ADFALD_LOG_PATH / f"Attack_Data_Master/{config.logName}"
             else: path = ADFALD_LOG_PATH / f"Training_Data_Master/{config.logName}"
         else:
-            if(config.isAnomalous): path = ADFALD_LOG_PATH / f"Attack_Data_Master/{config.logName}"
+            anomalySet = config.logName
+            anomalyTypeText = config.anomalyType.name.replace('_', '-')
+            anomalySet = anomalySet.removeprefix(f"UAD-{anomalyTypeText}-")
+            anomalySet = anomalySet.split('-', 1)[0]
+
+            if(config.anomalyType is not AnomalyType.UNK and config.anomalySet > 0): 
+                path = ADFALD_LOG_PATH / f"Attack_Data_Master/{config.anomalyType.name}_{anomalySet}/{config.logName}"
             else: path = ADFALD_LOG_PATH / f"Validation_Data_Master/{config.logName}"
 
         return path
-
-    def _LoadState(self, cfgFileName:str) -> PpS: return PpS.Load(cfgFileName)

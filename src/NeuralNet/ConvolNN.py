@@ -1,12 +1,10 @@
 import NNUtils
 import torch.nn as nn
-from torch import Tensor, relu, optim, float32  #Use torch.relu for tensor relu NNUtils.ReLu for floats
 
+from torch import Tensor, tensor, relu, optim, dtype, float32  #Use torch.relu for tensor relu NNUtils.ReLu for floats
 from NNUtils import PreprocessedData as PpD, PreprocessingState as PpS, NNConfig as NNC
-import HostLogPreprocessor as HLPp
-import NetLogPreprocessor as NLPp
 
-class CNN(nn.Module):
+class ConvolNN(nn.Module):
     def __init__(self, config:NNC, state:PpS, data:PpD):
         super().__init__()
         
@@ -27,16 +25,25 @@ class CNN(nn.Module):
         self.lossData:list[float] = []
         self.optimizer  = optim.Adam(self.parameters(), lr=config.learningRate)
 
-    def Debug(self): pass
+    def Debug(self) -> None:
+        if self.lossData:
+            for data in self.lossData: print(f"{data}\n")
 
     #? Runs training passes and returns a list of loss values for human inspection
-    def Train(self, epochs:int) -> list[float]: 
+    def Train(self, epochs:int):
         if self.data.x is None: raise ValueError("No training data.x provided")
         if self.data.y is None: raise ValueError("No training data.y provided")
 
-        x = Tensor(self.data.x, dtype=float32)
-        y = Tensor(self.data.y, dtype=float32).reshape(-1, 1) #[window_count, y_value]
+        self.train()            #Tell the pytorch NN it's in training mode
+        self.lossData.clear()
 
+        x = tensor(self.data.x, dtype=float32)
+        y = tensor(
+            [self.data.y] * len(self.data.x), 
+            dtype=float32
+        ).reshape(-1, 1) #[window_count, y_value] * len(x)
+
+        print(x.shape)
         for epoch in range(epochs):
             self.optimizer.zero_grad()          #Clear leftover gradients
             output = self._Forward(x)           #Forward pass & predict
@@ -44,6 +51,9 @@ class CNN(nn.Module):
             self.lossData.append(loss.item())   #Store loss data
             loss.backward()                     #Backprop
             self.optimizer.step()               #Update weights
+
+        if self.state.doDebug: self.Debug()
+
 
     def Predict(self) -> float: pass
 

@@ -93,6 +93,16 @@ class Format(Enum):
     UNK = 0
     ADFALD = 1
 
+class AnomalyType(Enum):
+    UNK             = "UNK"
+    ADD_USER        = "Adduser"
+    HYDRA_FTP       = "Hydra_FTP"
+    HYDRA_SSH       = "Hydra_SSH"
+    METERPRETER     = "Meterpreter"
+    JAVA_METERPRETER= "Java_Meterpreter"
+    WEB_SHELL       = "Web_Shell"
+
+
 #? Gets passed the preprocessor, any information the preproc requires to understand
 #? what it's doing goes in here. Note that note all the variables need to be set. if you
 #? reference the ThomTest.py the only values I care to initialize before passing it 
@@ -101,15 +111,16 @@ class Format(Enum):
 #? can be used as the NN state information.
 @dataclass
 class PreprocessingState:
-    model:Model         = Model.UNK
-    logFormat:Format    = Format.UNK
-    logName:str | None  = None
-    logPath:Path| None  = None
+    model:Model             = Model.UNK
+    logFormat:Format        = Format.UNK
+    logName:str | None      = None
+    logPath:Path| None      = None
     
-    isTraining:bool     = True
-    isAnomalous:bool    = False
-    isHostLog:bool      = True
-    doDebug:bool        = True
+    isTraining:bool         = True
+    isAnomalous:bool        = False
+    anomalyType:AnomalyType = AnomalyType.UNK
+    isHostLog:bool          = True
+    doDebug:bool            = True
     
     vocabulary:dict[int, str] | None= None
     embedding:dict[int, Vec4] | None= None
@@ -122,9 +133,12 @@ class PreprocessingState:
             print("--------------  PREPROC STATE DEBUG --------------")
             print(f"\t- Model: {self.model.name}\n\t- Format: {self.logFormat.name}")
             print(f"\t- Training = {self.isTraining}")
-            if(self.isTraining):print(f"\t- Log anomaly rating = {float(self.isAnomalous)}")
             if(self.isHostLog): print(f"\t- Host system log detected")
             else:               print(f"\t- Server log detected\n")
+            if(self.isTraining):
+                print(f"\t- Log anomaly rating = {float(self.isAnomalous)}")
+                if(self.anomalyType is not AnomalyType.UNK):
+                    print(f"\t- Known anomaly detected: {self.anomalyType.name}")
 
             print(f"\n-----------  Embedding & Vocabulary  ------------")
             for id, embed in self.embedding.items(): print(f"\t\t--> {id} : {self.vocabulary[id]} : {embed.AsList()}")
@@ -141,12 +155,12 @@ class PreprocessingState:
                 case FileFormat.TEXT: 
                     try: self._SaveTEXT()
                     except Exception as err:
-                        print(f"JSON save failed...\n{err}") 
+                        print(f"Text save failed...\n{err}") 
                         saveSuccess = False
                 case FileFormat.CSV: 
                     try: self._SaveCSV()
                     except Exception as err:
-                        print(f"JSON save failed...\n{err}") 
+                        print(f"CSV save failed...\n{err}") 
                         saveSuccess = False
 
         try: saveSuccess 
@@ -201,7 +215,7 @@ class PreprocessingState:
 
     #* SAVING & LOADING FUNCTIONALITY
     def _SaveJSON(self) -> bool: 
-        saveData:dict[str, any] = self._DatToDict()
+        saveData:dict[str, Any] = self._DatToDict()
         try: saveData
         except ValueError as err:
             print(f"Couldn't save data, no data found...\n{err}")
@@ -242,7 +256,9 @@ class PreprocessingState:
             
             sfText.write(f"\nisTraining={self.isTraining}\n")
             sfText.write(f"isAnomalous={self.isAnomalous}\n")
+            sfText.write(f"anomalyType={self.anomalyType.name}\n")
             sfText.write(f"isHostLog={self.isHostLog}\n")
+            sfText.write(f"doDebug = {self.doDebug}\n")
         
             sfText.write(f"\n[VOCABULARY]\n")
             if self.vocabulary is not None:
@@ -288,17 +304,18 @@ class PreprocessingState:
 
                 match(section):
                     case "STATE": 
-                        key, value = line.split("=", 1)
+                        key, arg = line.split("=", 1)
 
                         match(key):
-                            case "model":     state.model = Model[value]
-                            case "logFormat": state.logFormat = Format[value]
-                            case "logName":   state.logName = (None if value == None else value) 
-                            case "logPath":   state.logPath = (None if value == None else Path(value))
-                            case "isTraining": state.isTraining = value.lower() == "true"
-                            case "isAnomalous": state.isAnomalous = value.lower() == "true"
-                            case "isHostLog": state.isHostLog = value.lower() == "true"
-                            case "doDebug": state.doDebug = value.lower() == "true"
+                            case "model":     state.model = Model[arg]
+                            case "logFormat": state.logFormat = Format[arg]
+                            case "logName":   state.logName = (None if arg == None else arg) 
+                            case "logPath":   state.logPath = (None if arg == None else Path(arg))
+                            case "isTraining": state.isTraining = arg.lower() == "true"
+                            case "isAnomalous": state.isAnomalous = arg.lower() == "true"
+                            case "anomalyType": state.anomalyType = AnomalyType[arg]
+                            case "isHostLog": state.isHostLog = arg.lower() == "true"
+                            case "doDebug": state.doDebug = arg.lower() == "true"
                             case _: raise ValueError(f"Bad State key: {key}...")
 
                     case "VOCABULARY": 
@@ -332,6 +349,7 @@ class PreprocessingState:
 
             writer.writerow(["isTraining", self.isTraining])
             writer.writerow(["isAnomalous", self.isAnomalous])
+            writer.writerow(["anomalyType", self.anomalyType.name])
             writer.writerow(["isHostLog", self.isHostLog])
             writer.writerow(["doDebug", self.doDebug])
 
@@ -372,6 +390,7 @@ class PreprocessingState:
                     case "logPath":     state.logPath = Path(arg) if arg is not None else None
                     case "isTraining":  state.isTraining = arg.lower() == "true"
                     case "isAnomalous": state.isAnomalous = arg.lower() == "true"
+                    case "anomalyType": state.anomalyType = AnomalyType[arg]
                     case "isHostLog":   state.isHostLog = arg.lower() == "true"
                     case "doDebug":     state.doDebug = arg.lower() == "true"
                     case "vocabulary":
@@ -402,6 +421,7 @@ class PreprocessingState:
            
             "isTraining": self.isTraining,
             "isAnomalous": self.isAnomalous,
+            "anomalyType": self.anomalyType.name,
             "isHostLog": self.isHostLog,
             "doDebug": self.doDebug,
      
@@ -443,6 +463,7 @@ class PreprocessingState:
             
             isTraining  = data["isTraining"],
             isAnomalous = data["isAnomalous"],
+            anomalyType = data["anomalyType"],
             isHostLog   = data["isHostLog"],
             doDebug     = data["doDebug"],
 
@@ -479,13 +500,19 @@ class PreprocessedData:
             match(fmt):
                 case FileFormat.JSON: 
                     try: self._SaveJSON()
-                    except: saveSuccess = False
+                    except Exception as err: 
+                        print(f"JSON save failed...\n{err}")
+                        saveSuccess = False
                 case FileFormat.TEXT:
                     try: self._SaveText()
-                    except: saveSuccess = False
+                    except Exception as err: 
+                        print(f"Text save failed...\n{err}")
+                        saveSuccess = False
                 case FileFormat.CSV:
                     try: self._SaveCSV()
-                    except: saveSuccess = False
+                    except Exception as err: 
+                        print(f"Text save failed...\n{err}")
+                        saveSuccess = False
 
         try: saveSuccess
         except ValueError as err:
@@ -507,22 +534,23 @@ class PreprocessedData:
         return loadedPpD
 
     def _SaveJSON(self) -> bool:
-        saveData = self._DatToDict()
-
+        saveData:dict[str, Any] = self._DatToDict()
         try: saveData
         except ValueError as err:
             print(f"Couldn't save data, no data found...\n{err}")
             return False
 
-        jsonSaveDir:Path = PP_CFG_DIR / f"{datetime.now().strftime("%H:%M:%S")}-{self.model.name}-PpD.json"
-        with jsonSaveDir.open("w", encoding="utf-8") as sfJson:
-            json.dump(self._DatToDict(), sfJson, indent=4)
+        jsonSaveDir = PP_CFG_DIR / f"{datetime.now().strftime('%H-%M-%S')}--PpD.json"
+        jsonSaveDir.parent.mkdir(parents=True, exist_ok=True)
+        with jsonSaveDir.open(mode='w', encoding='utf-8') as sfJson:
+            json.dump(saveData, sfJson, indent=4)
+
         return True
 
     @classmethod
     def _LoadJSON(cls, filename:str) -> "PreprocessedData":
         file = filename
-        if(file.endswith(".json")): file.removesuffix(".json")
+        if(file.endswith(".json")): file = file.removesuffix(".json")
 
         loadPath:Path = PP_CFG_DIR / f"{file}.json"
         if not loadPath.exists():
@@ -530,11 +558,12 @@ class PreprocessedData:
 
         with loadPath.open("r", encoding="utf-8") as lfJson:
             PpD = json.load(lfJson)
+        if not PpD: raise ValueError(f"couldn't load PpD data from {loadPath}...")
 
         return cls._DatFromDict(PpD)
 
     def _SaveText(self) -> bool: 
-        textSaveDir:Path = PP_CFG_DIR / f"{datetime.now().strftime("%H:%M:%S")}-{self.model.name}-PpD.txt"
+        textSaveDir = PP_CFG_DIR / f"{datetime.now().strftime("%H-%M-%S")}--PpD.txt"
 
         with textSaveDir.open("w", encoding="utf-8") as sfText:
             sfText.write("[X]\n")
@@ -591,9 +620,8 @@ class PreprocessedData:
 
         return cls._DatFromDict(data)
 
-
     def _SaveCSV(self) -> bool: 
-        csvSaveDir:Path = PP_CFG_DIR / f"{datetime.now().strftime("%H:%M:%S")}-{self.model.name}-PpD.csv"
+        csvSaveDir = PP_CFG_DIR / f"{datetime.now().strftime("%H-%M-%S")}--PpD.csv"
         
         with csvSaveDir.open("w", newline="", encoding="utf-8") as sfCsv:
             writer = csv.writer(sfCsv)
@@ -642,6 +670,7 @@ class PreprocessedData:
             x=data.get("x"),
             y=data.get("y"),
             metadata=data.get("metadata"))
+
 
 
 #? Any parameters you need to train your model should go in here

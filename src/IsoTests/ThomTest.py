@@ -13,22 +13,17 @@ if SIBNET_DIR not in sys.path: sys.path.append(SIBNET_DIR)
 
 import NeuralNet.HostLogPreprocessor as HLpP
 import NeuralNet.NetLogPreprocessor as NLpP
-import NeuralNet.ConvolNN as CNN
+from NeuralNet.ConvolNN import ConvolNN as CNN
 from NeuralNet.NNUtils import PreprocessingState as PpS, PreprocessedData as PpD, Format, Model, NNConfig
 
-
-#stateCfg = PpS(model=Model.CONVOLUTIONAL,
-#            doDebug=True,
-#            logFormat=Format.ADFALD,
-#            logName="UTD-0023.txt" )
+stateCfg = PpS(model=Model.CONVOLUTIONAL,
+            doDebug=True,
+            logFormat=Format.ADFALD,
+            logName="UTD-0023.txt" )
+cnnCfg = NNConfig(model=Model.CONVOLUTIONAL)
 
 #TODO: Fix loading from JSON, VEC4 embeds are reinitialized each load 
-stateCfg = "12-50-14--CONVOLUTIONAL-PpS.json"
 preproc  = HLpP.HostLogPreprocessor(stateCfg)
-x= 4
-y=3
-
-#stateDatPair:tuple[PpS, PpD] = preproc.GetStateData()
-#stateCfg = stateDatPair[0]
-#dataCfg = stateDatPair[1]
-#stateCfg.Save()
+preprocStateDat:tuple[PpS, PpD] = preproc.GetStateData()
+model = CNN(config=cnnCfg, state=preprocStateDat[0], data=preprocStateDat[1])
+model.Train(30)
