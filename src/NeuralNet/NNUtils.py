@@ -143,25 +143,24 @@ class PreprocessingState:
             print(f"\n-----------  Embedding & Vocabulary  ------------")
             for id, embed in self.embedding.items(): print(f"\t\t--> {id} : {self.vocabulary[id]} : {embed.AsList()}")
 
-    def Save(self) -> bool:
-        saveSuccess:bool = True
-        for fmt in FileFormat:        
-            match(fmt):
-                case FileFormat.JSON: 
-                    try: self._SaveJSON()
-                    except Exception as err:
-                        print(f"JSON save failed...\n{err}") 
-                        saveSuccess = False 
-                case FileFormat.TEXT: 
-                    try: self._SaveTEXT()
-                    except Exception as err:
-                        print(f"Text save failed...\n{err}") 
-                        saveSuccess = False
-                case FileFormat.CSV: 
-                    try: self._SaveCSV()
-                    except Exception as err:
-                        print(f"CSV save failed...\n{err}") 
-                        saveSuccess = False
+    def Save(self, saveTime:str, saveFormat:FileFormat = FileFormat.JSON) -> bool:
+        saveSuccess:bool = True        
+        match(saveFormat):
+            case FileFormat.JSON: 
+                try: self._SaveJSON(saveTime)
+                except Exception as err:
+                    print(f"JSON save failed...\n{err}") 
+                    saveSuccess = False 
+            case FileFormat.TEXT: 
+                try: self._SaveTEXT(saveTime)
+                except Exception as err:
+                    print(f"Text save failed...\n{err}") 
+                    saveSuccess = False
+            case FileFormat.CSV: 
+                try: self._SaveCSV(saveTime)
+                except Exception as err:
+                    print(f"CSV save failed...\n{err}") 
+                    saveSuccess = False
 
         try: saveSuccess 
         except ValueError as err: 
@@ -170,10 +169,14 @@ class PreprocessingState:
         return saveSuccess
             
     @classmethod
-    def Load(cls, filename:str) -> "PreprocessingState":
-        file = filename.lower()
+    def Load(cls, timestamp:str, modelUsed:str) -> "PreprocessingState":
+        try: Model(modelUsed.upper())
+        except: ValueError(f"cannot load data for unknown model...")
+         
+        file = timestamp.lower()
         file = file.strip()
-            
+        file += f"--{modelUsed}-PpS"
+        
         loadedPpS = cls()
         match(DetermineFileFormat(file)):
             case FileFormat.JSON: loadedPpS = cls._LoadJSON(filename=file)
@@ -214,14 +217,14 @@ class PreprocessingState:
         return True
 
     #* SAVING & LOADING FUNCTIONALITY
-    def _SaveJSON(self) -> bool: 
+    def _SaveJSON(self, saveTime:str) -> bool: 
         saveData:dict[str, Any] = self._DatToDict()
         try: saveData
         except ValueError as err:
             print(f"Couldn't save data, no data found...\n{err}")
             return False
 
-        jsonSaveDir = PP_CFG_DIR / f"{datetime.now().strftime('%H-%M-%S')}--{self.model.name}-PpS.json"
+        jsonSaveDir = PP_CFG_DIR / f"{saveTime}--{self.model.name}-PpS.json"
         jsonSaveDir.parent.mkdir(parents=True, exist_ok=True)
         with jsonSaveDir.open(mode='w', encoding='utf-8') as sfJson:
             json.dump(saveData, sfJson, indent=4)
@@ -244,8 +247,8 @@ class PreprocessingState:
         
         return cls._DatFromDict(loadData)
 
-    def _SaveTEXT(self) -> bool: 
-        textSaveDir:Path = PP_CFG_DIR / f"{datetime.now().strftime("%H-%M-%S")}--{self.model.name}-PpS.txt"
+    def _SaveTEXT(self, saveTime:str) -> bool: 
+        textSaveDir:Path = PP_CFG_DIR / f"{saveTime}--{self.model.name}-PpS.txt"
 
         with textSaveDir.open("w", encoding="utf-8") as sfText:
             sfText.write("[STATE]\n")
@@ -335,8 +338,8 @@ class PreprocessingState:
                     case _: raise ValueError(f"Bad Section header: {section}...")
         return state
     
-    def _SaveCSV(self) -> bool:  
-        csvSaveDir:Path = PP_CFG_DIR / f"{datetime.now().strftime("%H-%M-%S")}-{self.model.name}-PpS.csv"
+    def _SaveCSV(self, saveTime:str) -> bool:  
+        csvSaveDir:Path = PP_CFG_DIR / f"{saveTime}--{self.model.name}-PpS.csv"
 
         with csvSaveDir.open("w", newline="", encoding="utf-8") as sfCsv:
             writer = csv.writer(sfCsv)
@@ -435,7 +438,7 @@ class PreprocessingState:
                 None
                 if self.embedding is None
                 else{
-                    str(id): embed.AsList()
+                    str(id): embed
                     for id, embed in self.embedding.items() }), }
     
     @classmethod
@@ -494,25 +497,24 @@ class PreprocessedData:
             print(f"\t-Metadata")
             for id, value in self.metadata.items(): print(f"\t\t--> {id} : {value}")
 
-    def Save(self) -> bool: 
+    def Save(self, saveTime:str, modelUsed:Model, saveFormat:FileFormat = FileFormat.JSON) -> bool: 
         saveSuccess:bool = True
-        for fmt in FileFormat:
-            match(fmt):
-                case FileFormat.JSON: 
-                    try: self._SaveJSON()
-                    except Exception as err: 
-                        print(f"JSON save failed...\n{err}")
-                        saveSuccess = False
-                case FileFormat.TEXT:
-                    try: self._SaveText()
-                    except Exception as err: 
-                        print(f"Text save failed...\n{err}")
-                        saveSuccess = False
-                case FileFormat.CSV:
-                    try: self._SaveCSV()
-                    except Exception as err: 
-                        print(f"Text save failed...\n{err}")
-                        saveSuccess = False
+        match(saveFormat):
+            case FileFormat.JSON: 
+                try: self._SaveJSON(saveTime, modelUsed)
+                except Exception as err: 
+                    print(f"JSON save failed...\n{err}")
+                    saveSuccess = False
+            case FileFormat.TEXT:
+                try: self._SaveText(saveTime, modelUsed)
+                except Exception as err: 
+                    print(f"Text save failed...\n{err}")
+                    saveSuccess = False
+            case FileFormat.CSV:
+                try: self._SaveCSV(saveTime, modelUsed)
+                except Exception as err: 
+                    print(f"Text save failed...\n{err}")
+                    saveSuccess = False
 
         try: saveSuccess
         except ValueError as err:
@@ -521,9 +523,13 @@ class PreprocessedData:
         return saveSuccess
 
     @classmethod
-    def Load(cls, filename:str) -> "PreprocessedData":
-        file = filename.lower()
+    def Load(cls, timestamp:str, modelUsed:str) -> "PreprocessedData":
+        try: Model(modelUsed.upper())
+        except: ValueError(f"cannot load data for unknown model...")
+        
+        file = timestamp.lower()
         file.strip()
+
 
         match(DetermineFileFormat(file)):
             case FileFormat.JSON:loadedPpD = cls._LoadJSON(file)
@@ -533,14 +539,14 @@ class PreprocessedData:
         if not loadedPpD: raise ValueError("PreprocessedData loading corrupted/unsuccessful...")
         return loadedPpD
 
-    def _SaveJSON(self) -> bool:
+    def _SaveJSON(self, saveTime:str, modelUsed:Model) -> bool:
         saveData:dict[str, Any] = self._DatToDict()
         try: saveData
         except ValueError as err:
             print(f"Couldn't save data, no data found...\n{err}")
             return False
 
-        jsonSaveDir = PP_CFG_DIR / f"{datetime.now().strftime('%H-%M-%S')}--PpD.json"
+        jsonSaveDir = PP_CFG_DIR / f"{saveTime}--{modelUsed.name}-PpD.json"
         jsonSaveDir.parent.mkdir(parents=True, exist_ok=True)
         with jsonSaveDir.open(mode='w', encoding='utf-8') as sfJson:
             json.dump(saveData, sfJson, indent=4)
@@ -562,8 +568,8 @@ class PreprocessedData:
 
         return cls._DatFromDict(PpD)
 
-    def _SaveText(self) -> bool: 
-        textSaveDir = PP_CFG_DIR / f"{datetime.now().strftime("%H-%M-%S")}--PpD.txt"
+    def _SaveText(self, saveTime:str, modelUsed:Model) -> bool: 
+        textSaveDir = PP_CFG_DIR / f"{saveTime}--{modelUsed.name}-PpD.txt"
 
         with textSaveDir.open("w", encoding="utf-8") as sfText:
             sfText.write("[X]\n")
@@ -620,8 +626,8 @@ class PreprocessedData:
 
         return cls._DatFromDict(data)
 
-    def _SaveCSV(self) -> bool: 
-        csvSaveDir = PP_CFG_DIR / f"{datetime.now().strftime("%H-%M-%S")}--PpD.csv"
+    def _SaveCSV(self, saveTime:str, modelUsed:Model) -> bool: 
+        csvSaveDir = PP_CFG_DIR / f"{saveTime}--{modelUsed.name}-PpD.csv"
         
         with csvSaveDir.open("w", newline="", encoding="utf-8") as sfCsv:
             writer = csv.writer(sfCsv)
@@ -711,12 +717,12 @@ class NNConfig:
             print(f"\t- dense units: {self.denseUnits}")
             print(f"\t- dropout: {self.dropout}")
 
-    def Save(self) -> bool: 
+    def Save(self, saveTime:str) -> bool: 
         saveData = self._DatToDict()
         fileName = self.configFileName
 
         if fileName is None:
-            fileName = (f"{self.model.name}-NNConfig.json")
+            fileName = (f"{saveTime}--{self.model.name}-NNC.json")
         if not fileName.endswith(".json"): fileName += ".json"
 
         saveDir:Path = NN_CFG_DIR / fileName
@@ -731,9 +737,23 @@ class NNConfig:
         return True
 
     @classmethod
-    def LoadNew(cls) -> "NNConfig": pass
-    @classmethod
-    def Load(cls) -> "NNConfig": pass
+    def Load(cls, filename:str) -> "NNConfig" | None: 
+        if not filename.endswith(".json"): filename += ".json"
+
+        loadPath:Path = NN_CFG_DIR / filename
+        if not loadPath.exists():
+            raise ValueError(f"bad load path at {loadPath}")
+        try:
+            with loadPath.open("r", encoding="utf-8") as lfJson:
+                loadData = json.load(lfJson)
+
+            config = cls()
+            config._DatFromDict(loadData)
+            return config
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as err:
+            print(f"failed to load NNConfig from {loadPath}...\n{err}")
+            return None
+        
     
     def _Validate(self) -> bool: 
         try: self.model is Model.UNK    #* Check model is set
@@ -760,7 +780,7 @@ class NNConfig:
         return {
             "loadSavedConfig": self.loadSavedConfig,
             "configFileName" : self.configFileName,
-            "model": self.model,
+            "model": self.model.name,
             "learningRate": self.learningRate,
             "embedSize": self.embedSize,
             "filters": self.filters,

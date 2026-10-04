@@ -27,3 +27,6 @@ preproc  = HLpP.HostLogPreprocessor(stateCfg)
 preprocStateDat:tuple[PpS, PpD] = preproc.GetStateData()
 model = CNN(config=cnnCfg, state=preprocStateDat[0], data=preprocStateDat[1])
 model.Train(30)
+#model.Save()
+
+model.Load("15-45-31", "CONVOLUTIONAL")
