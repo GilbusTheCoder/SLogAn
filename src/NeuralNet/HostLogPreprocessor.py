@@ -19,7 +19,8 @@ class HostLogPreprocessor:
             self.state:PpS  = self._InitState(initState)
         else: self.state:PpD= self._LoadState(initData)
 
-        if initData is None:self.data:PpD = self._InitData()
+        if   initState.logPath is None: self.data:PpD = None
+        elif initData is None:self.data:PpD = self._InitData()
         else:               self.data:PpD = self._LoadData(initData)
 
 
@@ -46,7 +47,7 @@ class HostLogPreprocessor:
     #? Add any necessary data to a config and return as the preproc self.state
     def _InitState(self, initialStateCfg:PpS) -> PpS:
         newConfig:PpS = initialStateCfg
-        newConfig.logPath   = self._DetLogPath(initialStateCfg)
+        #ewConfig.logPath   = self._DetLogPath(initialStateCfg)
         newConfig.vocabulary= self._ConstructVocab()
         newConfig.embedding = self._ConstructEmbedding(newConfig.vocabulary)
         return newConfig

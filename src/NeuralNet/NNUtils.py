@@ -1,10 +1,10 @@
-
 from pathlib import Path
 
 DATA_DIR = (Path.cwd() / "dat")
 NN_CFG_DIR = (DATA_DIR / "cfg/NN")
 PP_CFG_DIR = (DATA_DIR / "cfg/Pp")
 
+import re
 import csv
 import json
 import random
@@ -94,13 +94,13 @@ class Format(Enum):
     ADFALD = 1
 
 class AnomalyType(Enum):
-    UNK             = "UNK"
-    ADD_USER        = "Adduser"
-    HYDRA_FTP       = "Hydra_FTP"
-    HYDRA_SSH       = "Hydra_SSH"
-    METERPRETER     = "Meterpreter"
-    JAVA_METERPRETER= "Java_Meterpreter"
-    WEB_SHELL       = "Web_Shell"
+    UNK            = "UNK"
+    ADDUSER        = "Adduser"
+    HYDRAFTP       = "HydraFTP"
+    HYDRASSH       = "HydraSSH"
+    METERPRETER    = "Meterpreter"
+    JAVAMETERPRETER= "JavaMeterpreter"
+    WEBSHELL       = "WebShell"
 
 
 #? Gets passed the preprocessor, any information the preproc requires to understand
@@ -124,6 +124,21 @@ class PreprocessingState:
     
     vocabulary:dict[int, str] | None= None
     embedding:dict[int, Vec4] | None= None
+
+    def DetAnomalyType(self) -> AnomalyType:
+        if not self.isTraining: return AnomalyType.UNK
+        path = self.logPath.as_posix()
+        folder = path[:str(path).rfind('/')]
+        interpretedAnomaly = folder[folder.rfind('/') + 1:]
+        interpretedAnomaly = re.sub(r"\d", "", interpretedAnomaly)
+        interpretedAnomaly = interpretedAnomaly.replace("_", "")
+
+        try: anomaly = AnomalyType(interpretedAnomaly)
+        except ValueError as err: 
+            print(f"Bad anomaly interpretation...\n{err}")
+            return AnomalyType.UNK 
+        
+        return anomaly
 
     def Debug(self, doPrint:bool=False):
         try: self._Validate()

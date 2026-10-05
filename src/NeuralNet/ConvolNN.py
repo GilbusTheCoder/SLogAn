@@ -1,10 +1,17 @@
+import os
+import sys
+
+PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PARENT_DIR not in sys.path: sys.path.append(PARENT_DIR)
+
 import NNUtils
-import json
 import torch
 import torch.nn as nn
 
-from torch import Tensor, tensor, relu, optim, dtype, float32  #Use torch.relu for tensor relu NNUtils.ReLu for floats
+#Use torch.relu for tensor relu NNUtils.ReLu for floats
+from torch import Tensor, tensor, relu, optim, float32, long  
 from NNUtils import PreprocessedData as PpD, PreprocessingState as PpS, NNConfig as NNC
+from NNUtils import AnomalyType
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -36,15 +43,17 @@ class ConvolNN(nn.Module):
         self.pool   = nn.AdaptiveMaxPool1d(1)
         self.fcl0   = nn.Linear(config.filters, config.denseUnits)
         self.dropout= nn.Dropout(config.dropout)
-        self.fcl1   = nn.Linear(config.denseUnits, 1)
+        self.fcl1   = nn.Linear(config.denseUnits, len(AnomalyType))
 
-        self.lossFunction = nn.BCEWithLogitsLoss()  #Handles sigmoid internally
+        #self.lossFunction = nn.BCEWithLogitsLoss()  #Handles sigmoid internally
+        self.lossFunction = nn.CrossEntropyLoss()
         self.lossData:list[float] = []
         self.optimizer  = optim.Adam(self.parameters(), lr=config.learningRate)
 
     def Debug(self) -> None:
         if self.lossData:
-            for data in self.lossData: print(f"{data}\n")
+            print("-------- LOSS DATA --------")
+            for data in self.lossData: print(f"{data}")
 
     #? Runs training passes and returns a list of loss values for human inspection
     def Train(self, epochs:int):
@@ -55,12 +64,17 @@ class ConvolNN(nn.Module):
         self.lossData.clear()
 
         x = tensor(self.data.x, dtype=float32)
-        y = tensor(
-            [self.data.y] * len(self.data.x), 
-            dtype=float32
-        ).reshape(-1, 1) #[window_count, y_value] * len(x)
+        classIndex = self._BuildAnomalyMap(self.state.anomalyType, 
+                                           self.state.isAnomalous)
 
-        print(x.shape)
+        y = tensor(
+            [classIndex] * len(self.data.x), 
+            dtype=long)
+
+        if self.state.doDebug:
+            print(f"x_shape: {x.shape}")
+            print(f"y_shape: {y.shape}")
+        
         for epoch in range(epochs):
             self.optimizer.zero_grad()          #Clear leftover gradients
             output = self._Forward(x)           #Forward pass & predict
@@ -71,8 +85,21 @@ class ConvolNN(nn.Module):
 
         if self.state.doDebug: self.Debug()
 
-
-    def Predict(self) -> float: pass
+    def Predict(self) -> AnomalyType:
+        if self.data.x is None: raise ValueError("No prediction data.x provided") # Put network into evaluation mode. # # This disables Dropout. 
+        self.eval() 
+        x = tensor( self.data.x, dtype=float32 ) 
+        # No gradients are required during prediction. with torch.no_grad(): 
+        output = self._Forward(x) 
+        
+        # Find the class with the highest logit.
+        predictions = torch.argmax( output, dim=1 ) 
+        
+        # If multiple windows were provided, each window has a 
+        # prediction. For now, return the most common prediction 
+        # across all windows.
+        predictionIndex = torch.mode(predictions).values.item() 
+        return self._IndexToAnomaly(predictionIndex)
 
     def Save(self) -> bool: 
         #? Bring this back in when implementing training saves
@@ -80,22 +107,11 @@ class ConvolNN(nn.Module):
         saveTime:str = datetime.now().strftime("%H-%M-%S")
         filePath =  Path(NNUtils.NN_CFG_DIR / f"{saveTime}--{self.state.model.name}")
 
-        #saveDirJSON = filePath.with_suffix(".json")
         saveDirPT = filePath.with_suffix(".pt")
         
-        #saveDirJSON.mkdir(parents=True, exist_ok=True)
-
-        #data:tuple[str: Any] = self._DatToDict()
-        #with saveDirJSON.open("w", encoding="utf-8") as sfJson:
-        #    json.dump(data, sfJson, indent=4)
-        #try: saveDirJSON.exists()
-        #except ValueError as err:
-        #    print(f"save error for {saveDirJSON}\n{err}")
-        #    return False
-
         saveSuccess = self.config.Save(saveTime)
         saveSuccess = self.state.Save(saveTime)
-        saveSuccess = self.data.Save(saveTime)
+        saveSuccess = self.data.Save(saveTime, self.state.model)
 
         torch.save({
             "model_state": self.state_dict(),
@@ -109,25 +125,18 @@ class ConvolNN(nn.Module):
         return saveSuccess
 
     @classmethod
-    def Load(cls, configFileName:str, stateFileName:str, dataFileName: str) -> "ConvolNN":
+    def Load(cls, saveTime:str, modelType:str) -> "ConvolNN":
         #? Bring back commented code when loading training analysis data
-        cfgLoadDir = configFileName
-        #if(cfgLoadDir.endswith(".json")): cfgLoadDir=cfgLoadDir.removesuffix(".json")
+        cfgLoadDir = f"{saveTime}--{modelType}"
         if(cfgLoadDir.endswith(".pt")): cfgLoadDir=cfgLoadDir.removesuffix(".pt")
-
-        #cfgJsonLoadDir:Path = NNUtils.NN_CFG_DIR / f"{cfgLoadDir}.json"
-        #if not cfgJsonLoadDir.exists(): 
-        #    raise ValueError(f"Cannot load data, invalid path &| filename\n{cfgJsonLoadDir}...")    
-        cfgPTLoadDir:Path = NNUtils.NN_CFG_DIR / f"{cfgLoadDir}.json"
+    
+        cfgPTLoadDir:Path = NNUtils.NN_CFG_DIR / f"{cfgLoadDir}.pt"
         if not cfgPTLoadDir.exists(): 
             raise ValueError(f"Cannot load data, invalid path &| filename\n{cfgPTLoadDir}...")
-
-        #with cfgJsonLoadDir.open("r", encoding="utf-8") as lfJson:
-        #    data = json.load(lfJson)
-
-        model = cls(config=NNC.Load(configFileName), 
-                    state=PpS.Load(stateFileName), 
-                    data=PpD.Load(dataFileName))
+        
+        model = cls(config=NNC.Load(cfgLoadDir), 
+                    state=PpS.Load(cfgLoadDir), 
+                    data=PpD.Load(cfgLoadDir))
 
         checkpoint = torch.load(cfgPTLoadDir, weights_only=False)
         model.load_state_dict(checkpoint["model_state"])
@@ -180,3 +189,37 @@ class ConvolNN(nn.Module):
             learningRate=cfg["learningRate"] )
 
         newCNN.lossData = dataDict["training"]["lossData"]
+
+    @staticmethod
+    def _BuildAnomalyMap(anomalyType: AnomalyType, isAnomolous:bool) -> int:
+        if not isAnomolous: return 0
+
+        if anomalyType == AnomalyType.UNK:
+            raise ValueError("Cannot train cnn, unknown log type...")
+
+        anomalyMap = {
+            "ADDUSER"         : 1,
+            "HYDRAFTP"        : 2,
+            "HYDRASSH"        : 3,
+            "METERPRETER"     : 4,
+            "JAVAMETERPRETER" : 5,
+            "WEBSHELL"        : 6 }
+        
+        return anomalyMap[anomalyType.name]
+
+    @staticmethod 
+    def _IndexToAnomaly(index: int) -> AnomalyType | None: 
+        anomalyMap = { 
+            1: AnomalyType.ADDUSER, 
+            2: AnomalyType.HYDRAFTP, 
+            3: AnomalyType.HYDRASSH, 
+            4: AnomalyType.METERPRETER, 
+            5: AnomalyType.JAVAMETERPRETER, 
+            6: AnomalyType.WEBSHELL } # Class 0 represents a normal log. 
+        
+        if index == 0: return None 
+        if index not in anomalyMap: 
+            raise ValueError( f"Invalid CNN class index: {index}" ) 
+        
+        return anomalyMap[index]
+        

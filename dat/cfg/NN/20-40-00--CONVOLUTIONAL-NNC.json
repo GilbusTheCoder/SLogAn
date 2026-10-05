@@ -1,0 +1,11 @@
+{
+    "loadSavedConfig": false,
+    "configFileName": null,
+    "model": "CONVOLUTIONAL",
+    "learningRate": 0.001,
+    "embedSize": 4,
+    "filters": 64,
+    "kernelSize": 3,
+    "denseUnits": 32,
+    "dropout": 0.3
+}
