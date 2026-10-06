@@ -18,7 +18,7 @@ y = np.load("y_adfa.npy")
 X_att = X[y == 1]
 
 # 2. Fit DBSCAN
-db = DBSCAN(eps=0.8, min_samples=5).fit(X_att)
+db = DBSCAN(eps=0.15, min_samples=5).fit(X_att)
 labels = db.labels_
 
 # 3. PCA & Visualization
