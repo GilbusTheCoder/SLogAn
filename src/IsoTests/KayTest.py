@@ -1,43 +1,54 @@
-''' 
-Use this file for testing and importing whatever you need tested. We all have our 
-own files to (hopefully) avoid a ton of merging that would arise when using a shared
-main.py '''
+"""
+KayTest.py
+Model 2: Unsupervised Attack Clustering (DBSCAN)
+- Isolates attack traces (y = 1) from the ADFA-LD dataset
+- Performs density-based spatial clustering without target labels
+- Exports a 2D PCA projection plot (kay_attack_clusters.png)
+- Inspects and prints cluster distributions, elevated syscalls, and suppression signals
+"""
 
-import os
-import sys
 import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.cluster import DBSCAN
+from sklearn.decomposition import PCA
 
-PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if PARENT_DIR not in sys.path: sys.path.append(PARENT_DIR)
-SIBNET_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../NeuralNet"))
-if SIBNET_DIR not in sys.path: sys.path.append(SIBNET_DIR)
-
-# Only importing our own Model 2 clustering class
-from ClusterNN import ClusterNN
-
-
-# Test Script for Model 2 (DBSCAN Clustering)
-
-# 1. load the extracted adfa dataset
-print("loading data files...")
+# 1. Load data and filter attacks
 X = np.load("X_adfa.npy")
 y = np.load("y_adfa.npy")
+X_att = X[y == 1]
 
-# 2. we only care about clustering the attacks (label == 1)
-X_attacks = X[y == 1]
-print(f"got {len(X_attacks)} attack traces to cluster")
+# 2. Fit DBSCAN
+db = DBSCAN(eps=0.15, min_samples=5).fit(X_att)
+labels = db.labels_
 
-# 3. train dbscan
-# eps is neighbor radius, min_samples is points needed to form a group
-cluster_bot = ClusterNN(eps=2.5, min_samples=5)
-cluster_bot.Train(X_attacks)
+# 3. PCA & Visualization
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(X_att)
 
-# 4. print out quick results for our report
-stats = cluster_bot.Evaluate(X_attacks)
-print("\n Model 2 Clustering Results")
-for key, val in stats.items():
-    print(f"{key}: {val}")
+plt.figure(figsize=(8, 6))
+scatter = plt.scatter(X_pca[:, 0], X_pca[:, 1], c=labels, cmap="tab10", s=25)
+plt.title("ADFA-LD Attack Clusters (DBSCAN)")
+plt.xlabel("PCA 1")
+plt.ylabel("PCA 2")
+plt.colorbar(scatter, label="Cluster ID")
+plt.savefig("kay_attack_clusters.png")
+plt.close()
 
-# 5. save the 2d cluster scatter plot
-cluster_bot.Plot(X_attacks, save_name="kay_attack_clusters.png")
-print("\nall done! plot saved to kay_attack_clusters.png")
+# 4. Cluster inspection and feature deviations
+global_mean = np.mean(X_att, axis=0)
+for c in sorted(set(labels)):
+    mask = (labels == c)
+    count = int(np.sum(mask))
+    pct = (count / len(X_att)) * 100
+    name = f"Cluster {c}" if c != -1 else "Noise (-1)"
+    
+    print(f"\n{name}: {count} traces ({pct:.1f}%)")
+    if c == -1:
+        continue
+        
+    diff = np.mean(X_att[mask], axis=0) - global_mean
+    top_pos = np.argsort(diff)[-3:][::-1]
+    top_neg = np.argsort(diff)[:2]
+    
+    print(f"  Top elevated syscall IDs: {top_pos.tolist()}")
+    print(f"  Top suppressed syscall IDs: {top_neg.tolist()}")
