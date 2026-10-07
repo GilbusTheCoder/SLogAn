@@ -10,7 +10,7 @@ import torch.nn as nn
 
 #Use torch.relu for tensor relu NNUtils.ReLu for floats
 from torch import Tensor, tensor, relu, optim, float32, long  
-from NNUtils import PreprocessedData as PpD, PreprocessingState as PpS, NNConfig as NNC
+from NNUtils import PreprocessingData as PpD, PreprocessingState as PpS, NNConfig as NNC
 from NNUtils import AnomalyType
 from datetime import datetime
 from pathlib import Path
@@ -53,7 +53,7 @@ class ConvolNN(nn.Module):
     def Debug(self) -> None:
         if self.lossData:
             print("-------- LOSS DATA --------")
-            for data in self.lossData: print(f"{data}")
+            print(f"I_Loss: {self.lossData[0]}, \tF_Loss: {self.lossData[-1]}")
 
     #? Runs training passes and returns a list of loss values for human inspection
     def Train(self, epochs:int):
@@ -61,7 +61,7 @@ class ConvolNN(nn.Module):
         if self.data.y is None: raise ValueError("No training data.y provided")
 
         self.train()            #Tell the pytorch NN it's in training mode
-        self.lossData.clear()
+        #self.lossData.clear()
 
         x = tensor(self.data.x, dtype=float32)
         classIndex = self._BuildAnomalyMap(self.state.anomalyType, 
@@ -74,6 +74,7 @@ class ConvolNN(nn.Module):
         if self.state.doDebug:
             print(f"x_shape: {x.shape}")
             print(f"y_shape: {y.shape}")
+            print(f"Expected: {self.state.anomalyType.name}")
         
         for epoch in range(epochs):
             self.optimizer.zero_grad()          #Clear leftover gradients
@@ -88,17 +89,22 @@ class ConvolNN(nn.Module):
     def Predict(self) -> AnomalyType:
         if self.data.x is None: raise ValueError("No prediction data.x provided") # Put network into evaluation mode. # # This disables Dropout. 
         self.eval() 
-        x = tensor( self.data.x, dtype=float32 ) 
+        x = tensor(self.data.x, dtype=float32) 
         # No gradients are required during prediction. with torch.no_grad(): 
-        output = self._Forward(x) 
+        with torch.no_grad():
+            output = self._Forward(x) 
         
         # Find the class with the highest logit.
-        predictions = torch.argmax( output, dim=1 ) 
+        predictions = torch.argmax(output, dim=1) 
         
         # If multiple windows were provided, each window has a 
         # prediction. For now, return the most common prediction 
         # across all windows.
         predictionIndex = torch.mode(predictions).values.item() 
+
+        print(f"Prediction count: {torch.bincount(predictions, minlength=8)}")
+        print(f"Final Prediction: {predictionIndex}")
+
         return self._IndexToAnomaly(predictionIndex)
 
     def Save(self) -> bool: 
@@ -192,32 +198,38 @@ class ConvolNN(nn.Module):
 
     @staticmethod
     def _BuildAnomalyMap(anomalyType: AnomalyType, isAnomolous:bool) -> int:
-        if not isAnomolous: return 0
+        if not isAnomolous: return 7
 
-        if anomalyType == AnomalyType.UNK:
-            raise ValueError("Cannot train cnn, unknown log type...")
+        try: anomalyType == AnomalyType.UNK
+        except ValueError as err:
+            print(f"Cannot train cnn, unknown log type...\n{err}")
+            return 0
 
         anomalyMap = {
+            "UNK"             : 0,
             "ADDUSER"         : 1,
             "HYDRAFTP"        : 2,
             "HYDRASSH"        : 3,
             "METERPRETER"     : 4,
             "JAVAMETERPRETER" : 5,
-            "WEBSHELL"        : 6 }
+            "WEBSHELL"        : 6,
+            "NORMAL"          : 7 }
         
         return anomalyMap[anomalyType.name]
 
     @staticmethod 
-    def _IndexToAnomaly(index: int) -> AnomalyType | None: 
+    def _IndexToAnomaly(index: int) -> AnomalyType: 
         anomalyMap = { 
+            0: AnomalyType.UNK,
             1: AnomalyType.ADDUSER, 
             2: AnomalyType.HYDRAFTP, 
             3: AnomalyType.HYDRASSH, 
             4: AnomalyType.METERPRETER, 
             5: AnomalyType.JAVAMETERPRETER, 
-            6: AnomalyType.WEBSHELL } # Class 0 represents a normal log. 
+            6: AnomalyType.WEBSHELL,
+            7: AnomalyType.NORMAL } 
         
-        if index == 0: return None 
+        if index == 7: return AnomalyType.NORMAL 
         if index not in anomalyMap: 
             raise ValueError( f"Invalid CNN class index: {index}" ) 
         

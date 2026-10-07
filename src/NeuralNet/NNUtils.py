@@ -1,8 +1,8 @@
 from pathlib import Path
-
 DATA_DIR = (Path.cwd() / "dat")
 NN_CFG_DIR = (DATA_DIR / "cfg/NN")
 PP_CFG_DIR = (DATA_DIR / "cfg/Pp")
+ATK_DATA_DIR = (DATA_DIR / "HostLogs/ADFA-LD_Logs/Attack_Data_Master")
 
 import re
 import csv
@@ -12,7 +12,6 @@ import numpy as np
 
 from enum import Enum
 from typing import Any
-from datetime import datetime
 from dataclasses import dataclass
 
 #? Helper math functions
@@ -60,6 +59,13 @@ class Vec4:
         self.y += other.y
         self.z += other.z
 
+    def Sub(self, other:Vec4) -> None:
+        self.w -= other.w
+        self.x -= other.x
+        self.y -= other.y
+        self.z -= other.z
+
+
 
 
 #? A representation of a neuron. Idk if we'll ever use it as tensors exist but it's
@@ -79,6 +85,7 @@ class Neuron:
 
 
 class FileFormat(Enum):
+    UNK  = 0
     JSON = 1
     TEXT = 2
     CSV  = 3
@@ -89,7 +96,7 @@ class Model(Enum):
     CLUSTERING = 2
 
 #TODO: Add your log formats here
-class Format(Enum):
+class LogFormat(Enum):
     UNK = 0
     ADFALD = 1
 
@@ -101,6 +108,7 @@ class AnomalyType(Enum):
     METERPRETER    = "Meterpreter"
     JAVAMETERPRETER= "JavaMeterpreter"
     WEBSHELL       = "WebShell"
+    NORMAL         = "Normal"
 
 
 #? Gets passed the preprocessor, any information the preproc requires to understand
@@ -112,7 +120,7 @@ class AnomalyType(Enum):
 @dataclass
 class PreprocessingState:
     model:Model             = Model.UNK
-    logFormat:Format        = Format.UNK
+    logFormat:LogFormat     = LogFormat.UNK
     logName:str | None      = None
     logPath:Path| None      = None
     
@@ -125,8 +133,11 @@ class PreprocessingState:
     vocabulary:dict[int, str] | None= None
     embedding:dict[int, Vec4] | None= None
 
+    def DetIsAnomolous(self) -> bool: return (ATK_DATA_DIR.as_posix() in self.logPath.as_posix())
+
     def DetAnomalyType(self) -> AnomalyType:
         if not self.isTraining: return AnomalyType.UNK
+
         path = self.logPath.as_posix()
         folder = path[:str(path).rfind('/')]
         interpretedAnomaly = folder[folder.rfind('/') + 1:]
@@ -140,7 +151,7 @@ class PreprocessingState:
         
         return anomaly
 
-    def Debug(self, doPrint:bool=False):
+    def Debug(self, doPrint:bool=False) -> None:
         try: self._Validate()
         except: raise ValueError("PpS failed to validated...")
 
@@ -208,7 +219,7 @@ class PreprocessingState:
             print(f"PpS model is not set...\n{err}")
             return False
 
-        try: self.logFormat is not Format.UNK
+        try: self.logFormat is not LogFormat.UNK
         except ValueError as err:
             print(f"PpS log format is not set...\n{err}")
             return False
@@ -223,7 +234,7 @@ class PreprocessingState:
             print(f"no log path in PpS...\n{err}")
             return False
 
-        if(self.logFormat is Format.ADFALD):
+        if(self.logFormat is LogFormat.ADFALD):
             try: self.isHostLog
             except ValueError as err:
                 print(f"non-host log format is set to be processed as host...\n{err}")
@@ -326,7 +337,7 @@ class PreprocessingState:
 
                         match(key):
                             case "model":     state.model = Model[arg]
-                            case "logFormat": state.logFormat = Format[arg]
+                            case "logFormat": state.logFormat = LogFormat[arg]
                             case "logName":   state.logName = (None if arg == None else arg) 
                             case "logPath":   state.logPath = (None if arg == None else Path(arg))
                             case "isTraining": state.isTraining = arg.lower() == "true"
@@ -403,7 +414,7 @@ class PreprocessingState:
                 arg = row[1]
                 match(row[0]):
                     case "model":       state.model = Model[arg]
-                    case "logFormat":   state.logFormat = Format[arg]
+                    case "logFormat":   state.logFormat = LogFormat[arg]
                     case "logName":     state.logName = arg
                     case "logPath":     state.logPath = Path(arg) if arg is not None else None
                     case "isTraining":  state.isTraining = arg.lower() == "true"
@@ -472,7 +483,7 @@ class PreprocessingState:
 
         return cls(
             model       = Model[data["model"]],
-            logFormat   = Format[data["logFormat"]],
+            logFormat   = LogFormat[data["logFormat"]],
             logName     = data["logName"],
             logPath     = (
                 None
@@ -492,7 +503,7 @@ class PreprocessingState:
 
 #? The class containing our data which we pass to the models
 @dataclass
-class PreprocessedData:
+class PreprocessingData:
     x: object                                #* The data we're using
     y: float | None = None                   #* The value we're trying to predict 
                                              #* (0 = norm, 1 = abnorm)
@@ -538,13 +549,12 @@ class PreprocessedData:
         return saveSuccess
 
     @classmethod
-    def Load(cls, timestamp:str, modelUsed:str) -> "PreprocessedData":
+    def Load(cls, timestamp:str, modelUsed:str) -> "PreprocessingData":
         try: Model(modelUsed.upper())
         except: ValueError(f"cannot load data for unknown model...")
         
         file = timestamp.lower()
         file.strip()
-
 
         match(DetermineFileFormat(file)):
             case FileFormat.JSON:loadedPpD = cls._LoadJSON(file)
@@ -569,7 +579,7 @@ class PreprocessedData:
         return True
 
     @classmethod
-    def _LoadJSON(cls, filename:str) -> "PreprocessedData":
+    def _LoadJSON(cls, filename:str) -> "PreprocessingData":
         file = filename
         if(file.endswith(".json")): file = file.removesuffix(".json")
 
@@ -601,7 +611,7 @@ class PreprocessedData:
         return True
 
     @classmethod
-    def _LoadText(cls, filename:str) -> "PreprocessedData": 
+    def _LoadText(cls, filename:str) -> "PreprocessingData": 
         file = filename
         if(file.endswith(".txt")): file.removesuffix(".txt")
 
@@ -653,7 +663,7 @@ class PreprocessedData:
         return True
 
     @classmethod
-    def _LoadCSV(cls, filename:str) ->  "PreprocessedData":
+    def _LoadCSV(cls, filename:str) ->  "PreprocessingData":
         file = filename
         if(file.endswith(".csv")): file.removesuffix(".csv")
         
@@ -686,7 +696,7 @@ class PreprocessedData:
             "metadata": self.metadata } 
 
     @classmethod
-    def _DatFromDict(cls, data:dict[str, Any]) -> "PreprocessedData":
+    def _DatFromDict(cls, data:dict[str, Any]) -> "PreprocessingData":
         return cls(
             x=data.get("x"),
             y=data.get("y"),
@@ -711,7 +721,7 @@ class NNConfig:
 
     @classmethod
     def InitFromPpS(cls, preprocState:PreprocessingState) -> "NNConfig":
-        preprocState.Debug(doPrint=False)
+        preprocState.Debug(doPrint=preprocState.doDebug)
         defaultConfig = cls()
         defaultConfig.model = preprocState.model
         return defaultConfig

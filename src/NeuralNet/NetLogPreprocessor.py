@@ -27,7 +27,7 @@ import NetTranslator as NT
 import NNUtils
 
 from NNUtils import PreprocessingState as PpS
-from NNUtils import PreprocessedData as PpD
+from NNUtils import PreprocessingData as PpD
 from dataclasses import dataclass
 from pathlib import Path
 

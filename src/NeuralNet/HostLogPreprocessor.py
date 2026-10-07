@@ -3,10 +3,9 @@ from pathlib import Path
 PARENT_DIR = (Path.cwd() / "src")
 
 import ADFALDTranslator as AT
-from NNUtils import PreprocessingState as PpS, PreprocessedData as PpD
-from NNUtils import Vec4, Model, AnomalyType
+from NNUtils import PreprocessingState as PpS, PreprocessingData as PpD
+from NNUtils import Vec4, AnomalyType
 from typing import Any
-from re import sub
 
 MAX_CHUNK_LEN   = 10
 ADFALD_LOG_PATH = AT.HOST_LOG_PATH / "ADFA-LD_Logs"
@@ -47,7 +46,6 @@ class HostLogPreprocessor:
     #? Add any necessary data to a config and return as the preproc self.state
     def _InitState(self, initialStateCfg:PpS) -> PpS:
         newConfig:PpS = initialStateCfg
-        #ewConfig.logPath   = self._DetLogPath(initialStateCfg)
         newConfig.vocabulary= self._ConstructVocab()
         newConfig.embedding = self._ConstructEmbedding(newConfig.vocabulary)
         return newConfig
@@ -68,8 +66,7 @@ class HostLogPreprocessor:
             case "CLUSTERING" : pass                #TODO: This
         return PpD(x, y, metadata)
 
-    @classmethod
-    def _LoadData(cls, data:PpD | str) ->PpD:
+    def _LoadData(self, data:PpD | str) ->PpD:
         if type(data) is not str:
             newData:PpD = data
             newData.Debug()
@@ -107,8 +104,6 @@ class HostLogPreprocessor:
 
             embeddedTrace.append(embeddedChunk)
         return embeddedTrace
-
-
 
     def _PadWindow(self, window:list[int]) -> list[int]: 
         newWindow = window
