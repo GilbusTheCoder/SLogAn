@@ -1,8 +1,9 @@
 import re
 from pathlib import Path
 
-HOST_LOG_PATH = (Path.cwd() / "dat/HostLogs")
-SYSCALLS = (HOST_LOG_PATH / "ADFA-LD_Syscall_List.txt")
+REPO_ROOT = Path(__file__).resolve().parent.parent
+HOST_LOG_PATH = REPO_ROOT / "dat" / "HostLogs"
+SYSCALLS = HOST_LOG_PATH / "ADFA-LD_Syscall_List.txt"
 
 syscalls:dict[int, str] = {}
 with open(SYSCALLS, "r") as f:

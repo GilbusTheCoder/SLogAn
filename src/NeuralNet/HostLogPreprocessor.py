@@ -1,6 +1,7 @@
 
 from pathlib import Path
-PARENT_DIR = (Path.cwd() / "src")
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+PARENT_DIR = REPO_ROOT / "src"
 
 import ADFALDTranslator as AT
 from NNUtils import PreprocessingState as PpS, PreprocessingData as PpD
